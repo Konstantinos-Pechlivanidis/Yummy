@@ -10,7 +10,7 @@ const getUserById = `
 const confirmUser = "UPDATE users SET confirmed_user = true WHERE id = $1";
 
 const insertUser =
-  "INSERT INTO users (name, email, password, phone, role, google_id, facebook_id, newsletterSubscribed, profile_image) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
+  "INSERT INTO users (name, email, password, phone, role, google_id, facebook_id, newsletter_subscribed, profile_image) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
 
 const insertPasswordReset =
   "INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1, $2, $3) RETURNING *";

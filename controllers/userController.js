@@ -108,22 +108,18 @@ const registerUser = async (req, res, pool) => {
       password,
       phone,
       role,
-      newsletterSubscribed,
+      newsletter_subscribed,
       profile_image,
     } = value;
 
-    // ✅ Correctly use `pool.query`
     const existingUser = await pool.query(getUserByEmail, [email]);
-
     if (existingUser.rows.length > 0) {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // ✅ Insert user correctly
     const result = await pool.query(insertUser, [
       name,
       email,
@@ -132,21 +128,45 @@ const registerUser = async (req, res, pool) => {
       role,
       null,
       null,
-      newsletterSubscribed,
+      newsletter_subscribed,
       profile_image,
     ]);
 
-    // Send verification email
-    await sendVerificationEmail(result.rows[0]);
+    const newUser = result.rows[0];
 
-    res
-      .status(201)
-      .json({ message: "User registered. Check your email for verification." });
+    // Προαιρετικά: στείλε email επιβεβαίωσης
+    await sendVerificationEmail(newUser);
+
+    // ➕ Αυτόματο login
+    const payload = {
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      confirmed_user: newUser.confirmed_user,
+    };
+
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "30m" });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: NODE_ENV === "production",
+      path: "/",
+      sameSite: "Lax",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    // ➕ Επιστρέφεις και τα user data αν θες
+    res.status(201).json({
+      message: "Εγγραφή επιτυχής",
+      user: payload,
+    });
   } catch (err) {
     console.error("Error in registerUser:", err);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
 
 /**
  * User login

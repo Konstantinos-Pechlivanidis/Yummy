@@ -89,8 +89,7 @@ const checkAuthStatus = (req, res) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log("owner authenticated:", decoded);
-    res.json({ loggedIn: true, owner: decoded });
+    res.json({ loggedIn: true, user: decoded }); 
   } catch (err) {
     console.log("Invalid token, clearing cookie...");
     res.clearCookie("token");
@@ -233,7 +232,12 @@ const loginOwner = async (req, res, pool) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: owner.rows[0].id, email: owner.rows[0].email },
+      {
+        id: owner.rows[0].id,
+        email: owner.rows[0].email,
+        role: "owner",
+        name: owner.rows[0].name,
+      },
       JWT_SECRET,
       { expiresIn: "30m" }
     );
@@ -377,7 +381,7 @@ const getOwnerProfile = async (req, res, pool) => {
     }
 
     console.log("✅ Owner found:", ownerQuery.rows[0]);
-    res.json(ownerQuery.rows[0]);
+    res.json({ ...ownerQuery.rows[0], role: "owner" });
   } catch (error) {
     console.error("❌ Error in getOwnerProfile:", error);
     res.status(500).json({ message: "Server error" });
@@ -432,6 +436,34 @@ const resendVerificationEmailToOwner = async (req, res, pool) => {
   }
 };
 
+const updateRestaurantProfile = async (req, res, pool) => {
+  const restaurantId = req.params.id;
+  const { phone, email, socialMedia } = req.body;
+
+  const token = req.cookies.token;
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const ownerId = decoded.id;
+
+  const restaurant = await pool.query("SELECT * FROM restaurants WHERE id = $1", [restaurantId]);
+  if (!restaurant.rows.length || restaurant.rows[0].owner_id !== ownerId)
+    return res.status(403).json({ message: "Unauthorized" });
+
+  const result = await pool.query(
+    `UPDATE restaurants SET contact = $1 WHERE id = $2 RETURNING *`,
+    [
+      {
+        phone,
+        email,
+        socialMedia,
+      },
+      restaurantId,
+    ]
+  );
+
+  res.json({ message: "Ενημερώθηκε", restaurant: result.rows[0] });
+};
+
+
 module.exports = {
   registerOwner,
   checkAuthStatus,
@@ -444,4 +476,5 @@ module.exports = {
   getOwnerProfile,
   verifyOwnerEmail,
   resendVerificationEmailToOwner,
+  updateRestaurantProfile
 };
