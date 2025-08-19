@@ -12,6 +12,7 @@ const {
   fetchFilteredRestaurantsBase,
   countFilteredRestaurantsBase,
   verifyRestaurantOwnership,
+  fetchRestaurantsByOwner
 } = require("../queries/restaurantQueries");
 
 const { updateRestaurantSchema } = require("../validators/restaurantValidator");
@@ -296,10 +297,30 @@ const updateRestaurant = async (req, res, pool) => {
   }
 };
 
+const getOwnerRestaurant = async (req, res, pool) => {
+  const token = req.cookies.token;
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized - No token found" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { rows } = await pool.query(fetchRestaurantsByOwner, [decoded.id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "No restaurants found for this owner." });
+    }
+    res.json({ restaurant: rows[0] }); // Assuming one restaurant per owner for now
+  } catch (err) {
+    console.error("Error fetching owner's restaurant:", err);
+    res.status(500).json({ message: "Failed to load restaurant data." });
+  }
+};
+
 module.exports = {
   getTrendingRestaurants,
   getDiscountedRestaurants,
   getFilteredRestaurants,
   getRestaurantById,
   updateRestaurant,
+  getOwnerRestaurant
 };

@@ -95,6 +95,12 @@ const verifyRestaurantOwnership = `
   WHERE id = $1 AND owner_id = $2;
 `;
 
+const fetchRestaurantsByOwner = `
+  SELECT *
+  FROM restaurants
+  WHERE owner_id = $1
+`;
+
 module.exports = {
   fetchRestaurantById,
   fetchMenuItemsByRestaurant,
@@ -107,4 +113,5 @@ module.exports = {
   fetchFilteredRestaurantsBase,
   countFilteredRestaurantsBase,
   verifyRestaurantOwnership,
+  fetchRestaurantsByOwner
 };
