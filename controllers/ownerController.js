@@ -15,10 +15,8 @@ const {
 } = require("../validators/ownerValidator");
 
 const jwt = require("jsonwebtoken");
-const passport = require("passport");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-const { v4: uuidv4 } = require("uuid");
 
 const {
   sendVerificationEmail,
@@ -42,18 +40,15 @@ const registerOwner = async (req, res, pool) => {
       profile_image,
     } = value;
 
-    // ✅ Correctly use `pool.query`
     const existingOwner = await pool.query(getOwnerByEmail, [email]);
 
     if (existingOwner.rows.length > 0) {
       return res.status(400).json({ message: "Owner already exists" });
     }
 
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // ✅ Insert owner correctly
     const result = await pool.query(insertOwner, [
       name,
       email,
@@ -66,7 +61,6 @@ const registerOwner = async (req, res, pool) => {
       profile_image,
     ]);
 
-    // Send verification email
     await sendVerificationEmail(result.rows[0]);
 
     res.status(201).json({
@@ -79,11 +73,8 @@ const registerOwner = async (req, res, pool) => {
 };
 
 const checkAuthStatus = (req, res) => {
-  console.log("Checking authentication status..."); // Debug log
-
   const token = req.cookies.token;
   if (!token) {
-    console.log("No token found, owner is not logged in.");
     return res.json({ loggedIn: false });
   }
 
@@ -91,7 +82,6 @@ const checkAuthStatus = (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     res.json({ loggedIn: true, user: decoded }); 
   } catch (err) {
-    console.log("Invalid token, clearing cookie...");
     res.clearCookie("token");
     res.json({ loggedIn: false });
   }
@@ -104,13 +94,11 @@ const logoutOwner = (req, res) => {
 
 const requestResetPasswordOwner = async (req, res, pool) => {
   try {
-    // ✅ Validate email input
     const { error, value } = ownerUpdateSchema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
     const { email } = value;
 
-    // ✅ Check if owner exists
     const ownerResult = await pool.query(getOwnerByEmail, [email]);
     if (ownerResult.rows.length === 0) {
       return res
@@ -119,20 +107,16 @@ const requestResetPasswordOwner = async (req, res, pool) => {
     }
 
     const owner = ownerResult.rows[0];
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    const token = crypto.randomBytes(32).toString("hex"); // secure token
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
-
-    const updatePassword = await pool.query(insertPasswordResetOwner, [
+    await pool.query(insertPasswordResetOwner, [
       owner.id,
       token,
       expiresAt,
     ]);
 
-    // ✅ Construct reset URL
     const resetUrl = `${FRONT_END_URL}:${envPORT}/reset-password-owner.html?token=${token}`;
-
-    // ✅ Send email
     await sendResetPasswordEmail(owner, resetUrl);
 
     res.json({ message: "Reset link sent. Check your email." });
@@ -152,28 +136,21 @@ const resetPasswordOwner = async (req, res, pool) => {
     );
 
     const resetRequest = result.rows[0];
-    if (!resetRequest || resetRequest.used) {
+    if (!resetRequest || resetRequest.used || new Date() > new Date(resetRequest.expires_at)) {
       return res
         .status(400)
         .json({ message: "Invalid or expired reset token." });
     }
 
-    if (new Date() > new Date(resetRequest.expires_at)) {
-      return res.status(400).json({ message: "Reset token has expired." });
-    }
-
-    // ✅ Get the owner
     const ownerResult = await pool.query(`SELECT * FROM owners WHERE id = $1`, [
       resetRequest.owner_id,
     ]);
     const owner = ownerResult.rows[0];
 
-    // ✅ Hash and update the password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     await pool.query(updateOwnerPassword, [hashedPassword, owner.id]);
 
-    // ✅ Mark the token as used
     await pool.query(
       `UPDATE password_resets_owners SET used = TRUE WHERE id = $1`,
       [resetRequest.id]
@@ -195,17 +172,15 @@ const checkResetPasswordTokenOwner = async (req, res, pool) => {
     );
 
     const resetRequest = result.rows[0];
-    if (!resetRequest || resetRequest.used) {
+    if (!resetRequest || resetRequest.used || new Date() > new Date(resetRequest.expires_at)) {
       return res
         .status(400)
         .json({ message: "Invalid or expired reset token." });
     }
-
-    if (new Date() > new Date(resetRequest.expires_at)) {
-      return res.status(400).json({ message: "Reset token has expired." });
-    }
+    // If we reach here, the token is valid
+    res.json({ valid: true });
   } catch (err) {
-    console.error("❌ Error in resetPassword:", err);
+    console.error("❌ Error in checkResetPasswordTokenOwner:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -216,42 +191,40 @@ const loginOwner = async (req, res, pool) => {
   if (error) return res.status(400).json({ error: error.details[0].message });
 
   try {
-    const owner = await pool.query(getOwnerByEmail, [email]);
-    if (owner.rows.length === 0) {
+    const ownerResult = await pool.query(getOwnerByEmail, [email]);
+    if (ownerResult.rows.length === 0) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
+    
+    const owner = ownerResult.rows[0];
 
-    // Compare password
-    const validPassword = await bcrypt.compare(
-      password,
-      owner.rows[0].password
-    );
+    const validPassword = await bcrypt.compare(password, owner.password);
     if (!validPassword) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        id: owner.rows[0].id,
-        email: owner.rows[0].email,
-        role: "owner",
-        name: owner.rows[0].name,
-      },
-      JWT_SECRET,
-      { expiresIn: "30m" }
-    );
+    const payload = {
+      id: owner.id,
+      email: owner.email,
+      role: "owner",
+      name: owner.name,
+      confirmed_user: owner.confirmed_user,
+    };
+
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
+    
     res.cookie("token", token, {
       httpOnly: true,
       secure: NODE_ENV === "production",
       path: "/",
       sameSite: "Lax",
-      maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+      maxAge: 24 * 60 * 60 * 1000,
     });
 
+    // 👇 THE FIX: Return the full payload object, not a simplified one.
     res.json({
       message: "Login successful",
-      owner: { id: owner.rows[0].id, email: owner.rows[0].email },
+      owner: payload,
     });
   } catch (error) {
     console.error(error.message);
@@ -261,88 +234,41 @@ const loginOwner = async (req, res, pool) => {
 
 const updateOwnerDetails = async (req, res, pool) => {
   try {
-    console.log("🔍 Checking authentication via cookies...");
-
-    // ✅ Extract JWT token from cookies
     const token = req.cookies.token;
     if (!token) {
-      console.log("🚨 No token found in cookies");
       return res.status(401).json({ message: "Unauthorized - No token found" });
     }
 
-    // ✅ Verify token and decode owner data
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      console.log("🚨 Invalid token:", err);
-      res.clearCookie("token"); // Clear corrupted token
-      return res.status(401).json({ message: "Unauthorized - Invalid token" });
-    }
-
-    console.log("✅ Decoded owner:", decoded);
+    const decoded = jwt.verify(token, JWT_SECRET);
     const ownerId = decoded.id;
 
-    // ✅ Validate input
     const { error, value } = ownerUpdateSchema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
-    const { name, email, password, phone, google_id, facebook_id } = value;
-
-    // ✅ Fetch owner from database
-    const ownerQuery = await pool.query(getOwnerById, [ownerId]);
-    if (ownerQuery.rows.length === 0) {
-      console.log("🚨 Owner not found in database");
-      return res.status(404).json({ message: "Owner not found" });
-    }
-
-    console.log("✅ Owner found:", ownerQuery.rows[0]);
-
-    // ✅ Hash password if provided
+    const { name, email, password, phone } = value;
+    
     let hashedPassword;
     if (password) {
       const salt = await bcrypt.genSalt(10);
       hashedPassword = await bcrypt.hash(password, salt);
     }
 
-    // ✅ Construct update fields dynamically
     const updateFields = [];
     const updateValues = [];
+    let counter = 1;
 
-    if (name)
-      updateFields.push(`name = $${updateFields.length + 1}`),
-        updateValues.push(name);
-    if (email)
-      updateFields.push(`email = $${updateFields.length + 1}`),
-        updateValues.push(email);
-    if (phone)
-      updateFields.push(`phone = $${updateFields.length + 1}`),
-        updateValues.push(phone);
-    if (hashedPassword)
-      updateFields.push(`password = $${updateFields.length + 1}`),
-        updateValues.push(hashedPassword);
-    if (google_id)
-      updateFields.push(`google_id = $${updateFields.length + 1}`),
-        updateValues.push(google_id);
-    if (facebook_id)
-      updateFields.push(`facebook_id = $${updateFields.length + 1}`),
-        updateValues.push(facebook_id);
+    if (name) { updateFields.push(`name = $${counter++}`); updateValues.push(name); }
+    if (email) { updateFields.push(`email = $${counter++}`); updateValues.push(email); }
+    if (phone) { updateFields.push(`phone = $${counter++}`); updateValues.push(phone); }
+    if (hashedPassword) { updateFields.push(`password = $${counter++}`); updateValues.push(hashedPassword); }
 
     if (updateFields.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "No valid fields provided for update" });
+      return res.status(400).json({ message: "No valid fields provided for update" });
     }
 
     updateValues.push(ownerId);
-
-    // ✅ Update owner in database
-    const result = await pool.query(
-      updateOwner(updateFields.join(", ")),
-      updateValues
-    );
-
-    console.log("✅ Owner updated successfully:", result.rows[0]);
+    const result = await pool.query(updateOwner(updateFields.join(", "), counter), updateValues);
+    
     res.json({ message: "Owner updated successfully", owner: result.rows[0] });
   } catch (err) {
     console.error("❌ Error in updateOwnerDetails:", err);
@@ -352,35 +278,18 @@ const updateOwnerDetails = async (req, res, pool) => {
 
 const getOwnerProfile = async (req, res, pool) => {
   try {
-    console.log("🔍 Checking authentication via cookies...");
-
-    // ✅ Extract JWT token from cookies
     const token = req.cookies.token;
     if (!token) {
-      console.log("🚨 No token found in cookies");
       return res.status(401).json({ message: "Unauthorized - No token found" });
     }
 
-    // ✅ Verify token and decode user data
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      console.log("🚨 Invalid token:", err);
-      res.clearCookie("token"); // Clear corrupted token
-      return res.status(401).json({ message: "Unauthorized - Invalid token" });
-    }
-
-    console.log("✅ Decoded owner:", decoded);
-
-    // ✅ Fetch user from database using decoded ID
+    const decoded = jwt.verify(token, JWT_SECRET);
     const ownerQuery = await pool.query(getOwnerById, [decoded.id]);
+    
     if (ownerQuery.rows.length === 0) {
-      console.log("🚨 Owner not found in database");
       return res.status(404).json({ message: "Owner not found" });
     }
 
-    console.log("✅ Owner found:", ownerQuery.rows[0]);
     res.json({ ...ownerQuery.rows[0], role: "owner" });
   } catch (error) {
     console.error("❌ Error in getOwnerProfile:", error);
@@ -394,12 +303,9 @@ const verifyOwnerEmail = async (req, res, pool) => {
     if (!token)
       return res.status(400).json({ message: "Invalid or expired token" });
 
-    // Verify token
     const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Update user as verified
-    const setConfirmedOwner = await pool.query(confirmOwner, [decoded.id]);
-    console.log(setConfirmedOwner);
+    await pool.query(confirmOwner, [decoded.id]);
+    
     res.json({ message: "Email verified successfully. You can now log in." });
   } catch (error) {
     res.status(500).json({ message: "Invalid or expired token" });
@@ -411,7 +317,6 @@ const resendVerificationEmailToOwner = async (req, res, pool) => {
   if (!email) return res.status(400).json({ message: "Email is required." });
 
   try {
-    // Check if user exists
     const existingOwner = await pool.query(getOwnerByEmail, [email]);
 
     if (existingOwner.rows.length === 0) {
@@ -420,8 +325,7 @@ const resendVerificationEmailToOwner = async (req, res, pool) => {
 
     const owner = existingOwner.rows[0];
 
-    // Check if already verified
-    if (owner.is_verified) {
+    if (owner.confirmed_user) {
       return res.status(400).json({ message: "Owner is already verified." });
     }
 
@@ -429,40 +333,10 @@ const resendVerificationEmailToOwner = async (req, res, pool) => {
 
     res.json({ message: "Verification email resent! Check your inbox." });
   } catch (error) {
-    console.error("Error in resendVerificationEmail:", error);
-    res.status(500).json({
-      message: "Error resending verification email. Please try again later.",
-    });
+    console.error("Error in resendVerificationEmailToOwner:", error);
+    res.status(500).json({ message: "Error resending verification email." });
   }
 };
-
-const updateRestaurantProfile = async (req, res, pool) => {
-  const restaurantId = req.params.id;
-  const { phone, email, socialMedia } = req.body;
-
-  const token = req.cookies.token;
-  const decoded = jwt.verify(token, process.env.JWT_SECRET);
-  const ownerId = decoded.id;
-
-  const restaurant = await pool.query("SELECT * FROM restaurants WHERE id = $1", [restaurantId]);
-  if (!restaurant.rows.length || restaurant.rows[0].owner_id !== ownerId)
-    return res.status(403).json({ message: "Unauthorized" });
-
-  const result = await pool.query(
-    `UPDATE restaurants SET contact = $1 WHERE id = $2 RETURNING *`,
-    [
-      {
-        phone,
-        email,
-        socialMedia,
-      },
-      restaurantId,
-    ]
-  );
-
-  res.json({ message: "Ενημερώθηκε", restaurant: result.rows[0] });
-};
-
 
 module.exports = {
   registerOwner,
@@ -476,5 +350,4 @@ module.exports = {
   getOwnerProfile,
   verifyOwnerEmail,
   resendVerificationEmailToOwner,
-  updateRestaurantProfile
 };

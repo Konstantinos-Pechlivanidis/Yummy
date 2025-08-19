@@ -12,8 +12,13 @@ const {
   fetchFilteredRestaurantsBase,
   countFilteredRestaurantsBase,
   verifyRestaurantOwnership,
-  fetchRestaurantsByOwner
+  fetchRestaurantsByOwner,
 } = require("../queries/restaurantQueries");
+
+// 👇 Import the reservations query
+const {
+  fetchOwnerFilteredReservations,
+} = require("../queries/reservationsQueries");
 
 const { updateRestaurantSchema } = require("../validators/restaurantValidator");
 
@@ -44,7 +49,7 @@ const getTrendingRestaurants = async (req, res, pool) => {
 
     // Calculate pagination information
     const currentPage = page;
-    const recordsOnCurrentPage = allTrendingRestaurants.length; // This will be pageSize or less if it's the last page
+    const recordsOnCurrentPage = allTrendingRestaurants.length;
     const viewedRecords = (currentPage - 1) * pageSize + recordsOnCurrentPage;
     const remainingRecords = totalCount - viewedRecords;
 
@@ -305,13 +310,39 @@ const getOwnerRestaurant = async (req, res, pool) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const { rows } = await pool.query(fetchRestaurantsByOwner, [decoded.id]);
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "No restaurants found for this owner." });
+    const { rows: restaurantRows } = await pool.query(fetchRestaurantsByOwner, [
+      decoded.id,
+    ]);
+
+    if (restaurantRows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: "No restaurants found for this owner." });
     }
-    res.json({ restaurant: rows[0] }); // Assuming one restaurant per owner for now
+
+    const restaurant = restaurantRows[0];
+
+    // Fetch all related data in parallel for efficiency
+    const [menuRes, specialMenuRes, couponRes, reservationRes] =
+      await Promise.all([
+        pool.query(fetchMenuItemsByRestaurant, [restaurant.id]),
+        pool.query(fetchSpecialMenusByRestaurant, [restaurant.id]),
+        pool.query(fetchCouponsByRestaurant, [restaurant.id]),
+        pool.query(fetchOwnerFilteredReservations, [decoded.id]),
+      ]);
+
+    // Combine all data into a single response object
+    const responseData = {
+      ...restaurant,
+      menu_items: menuRes.rows || [],
+      special_menus: specialMenuRes.rows || [],
+      coupons: couponRes.rows || [],
+      reservations: reservationRes.rows || [],
+    };
+
+    res.json({ restaurant: responseData });
   } catch (err) {
-    console.error("Error fetching owner's restaurant:", err);
+    console.error("Error fetching owner's restaurant and related data:", err);
     res.status(500).json({ message: "Failed to load restaurant data." });
   }
 };
@@ -322,5 +353,5 @@ module.exports = {
   getFilteredRestaurants,
   getRestaurantById,
   updateRestaurant,
-  getOwnerRestaurant
+  getOwnerRestaurant,
 };

@@ -15,6 +15,7 @@ const pool = require("./config/db.config");
 const { envPORT, FRONT_END_URL } = process.env;
 
 // import routes
+const authRoutes = require("./routes/api/v1/auth"); // 👈 Add this
 const userRoutes = require("./routes/api/v1/user");
 const restaurantRoutes = require("./routes/api/v1/restaurant");
 const testimonialRoutes = require("./routes/api/v1/testimonials");
@@ -50,6 +51,7 @@ app.use(rateLimiter);
 app.use(cors({ origin: FRONT_END_URL, credentials: true }));
 
 // routes
+app.use("/api/v1/auth", authRoutes(pool)); // 👈 Add this
 app.use("/api/v1/user", userRoutes(pool));
 app.use("/api/v1/restaurant", restaurantRoutes(pool));
 app.use("/api/v1/testimonials", testimonialRoutes(pool));
