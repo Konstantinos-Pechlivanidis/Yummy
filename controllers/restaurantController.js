@@ -13,6 +13,7 @@ const {
   countFilteredRestaurantsBase,
   verifyRestaurantOwnership,
   fetchRestaurantsByOwner,
+  updateRestaurantContactQuery
 } = require("../queries/restaurantQueries");
 
 // 👇 Import the reservations query
@@ -243,65 +244,6 @@ const getRestaurantById = async (req, res, pool) => {
   }
 };
 
-const updateRestaurant = async (req, res, pool) => {
-  const token = req.cookies.token;
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized - No token found" });
-  }
-
-  let decoded;
-  try {
-    decoded = jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    res.clearCookie("token");
-    return res.status(401).json({ message: "Unauthorized - Invalid token" });
-  }
-
-  const { id } = req.params;
-  const { error, value } = updateRestaurantSchema.validate(req.body);
-  if (error) {
-    return res
-      .status(400)
-      .json({ message: "Validation failed", details: error.details });
-  }
-
-  try {
-    const ownershipResult = await pool.query(verifyRestaurantOwnership, [
-      id,
-      decoded.id,
-    ]);
-    if (ownershipResult.rowCount === 0) {
-      return res
-        .status(403)
-        .json({ message: "Forbidden - You do not own this restaurant." });
-    }
-
-    const fields = Object.keys(value);
-    if (fields.length === 0) {
-      return res.status(400).json({ message: "No fields provided to update." });
-    }
-
-    const setClause = fields.map((key, i) => `${key} = $${i + 1}`).join(", ");
-    const values = Object.values(value);
-
-    const query = `
-      UPDATE restaurants
-      SET ${setClause}, updated_at = NOW()
-      WHERE id = $${fields.length + 1}
-      RETURNING *;
-    `;
-
-    const { rows } = await pool.query(query, [...values, id]);
-
-    res
-      .status(200)
-      .json({ message: "Restaurant updated", restaurant: rows[0] });
-  } catch (err) {
-    console.error("Error updating restaurant:", err);
-    res.status(500).json({ message: "Failed to update restaurant." });
-  }
-};
-
 const getOwnerRestaurant = async (req, res, pool) => {
   const token = req.cookies.token;
   if (!token) {
@@ -347,6 +289,70 @@ const getOwnerRestaurant = async (req, res, pool) => {
   }
 };
 
+const updateRestaurant = async (req, res, pool) => {
+  const token = req.cookies.token;
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized - No token found" });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    res.clearCookie("token");
+    return res.status(401).json({ message: "Unauthorized - Invalid token" });
+  }
+
+  const { id } = req.params;
+  const { error, value } = updateRestaurantSchema.validate(req.body);
+  if (error) {
+    return res
+      .status(400)
+      .json({ message: "Validation failed", details: error.details });
+  }
+
+  try {
+    const ownershipResult = await pool.query(verifyRestaurantOwnership, [
+      id,
+      decoded.id,
+    ]);
+    if (ownershipResult.rowCount === 0) {
+      return res
+        .status(403)
+        .json({ message: "Forbidden - You do not own this restaurant." });
+    }
+
+    // 🔒 Hard whitelist: only contact JSONB is updatable here
+    const contact = value?.contact;
+    if (contact === undefined) {
+      return res
+        .status(400)
+        .json({ message: "Only 'contact' is allowed to be updated." });
+    }
+    if (
+      contact === null ||
+      typeof contact !== "object" ||
+      Array.isArray(contact)
+    ) {
+      return res
+        .status(400)
+        .json({ message: "'contact' must be a JSON object." });
+    }
+
+    const { rows } = await pool.query(updateRestaurantContactQuery, [
+      contact,
+      id,
+    ]);
+
+    return res
+      .status(200)
+      .json({ message: "Restaurant updated", restaurant: rows[0] });
+  } catch (err) {
+    console.error("Error updating restaurant:", err);
+    return res.status(500).json({ message: "Failed to update restaurant." });
+  }
+};
+
 module.exports = {
   getTrendingRestaurants,
   getDiscountedRestaurants,
@@ -354,4 +360,5 @@ module.exports = {
   getRestaurantById,
   updateRestaurant,
   getOwnerRestaurant,
+  updateRestaurant
 };

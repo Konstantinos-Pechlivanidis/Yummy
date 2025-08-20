@@ -221,7 +221,7 @@ const loginOwner = async (req, res, pool) => {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
-    // 👇 THE FIX: Return the full payload object, not a simplified one.
+    // 👇 THE CRITICAL FIX: Return the full payload object as the 'owner' property.
     res.json({
       message: "Login successful",
       owner: payload,

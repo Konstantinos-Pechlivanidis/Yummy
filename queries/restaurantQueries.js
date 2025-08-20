@@ -48,9 +48,10 @@ LIMIT $1 OFFSET $2;
 `;
 
 const getRestaurantsTotal = `
-    SELECT COUNT(*) 
-    FROM restaurants
+  SELECT COUNT(*) 
+  FROM restaurants
 `;
+
 const fetchDiscountedRestaurants = `SELECT 
   sm.*,
   row_to_json(r) AS restaurant
@@ -84,7 +85,6 @@ const fetchFilteredRestaurantsBase = `
   FROM restaurants r
 `;
 
-
 const countFilteredRestaurantsBase = `
   SELECT COUNT(*) AS count
   FROM restaurants
@@ -101,6 +101,15 @@ const fetchRestaurantsByOwner = `
   WHERE owner_id = $1
 `;
 
+/* 🔒 NEW: contact-only update to avoid unintended fields */
+const updateRestaurantContactQuery = `
+  UPDATE restaurants
+  SET contact = $1::jsonb,
+      updated_at = NOW()
+  WHERE id = $2
+  RETURNING *;
+`;
+
 module.exports = {
   fetchRestaurantById,
   fetchMenuItemsByRestaurant,
@@ -113,5 +122,6 @@ module.exports = {
   fetchFilteredRestaurantsBase,
   countFilteredRestaurantsBase,
   verifyRestaurantOwnership,
-  fetchRestaurantsByOwner
+  fetchRestaurantsByOwner,
+  updateRestaurantContactQuery,
 };
