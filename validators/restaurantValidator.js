@@ -1,15 +1,18 @@
 const Joi = require("joi");
 
+const contactSchema = Joi.object({
+  phone: Joi.string().max(50).allow("", null),
+  email: Joi.string().email().allow("", null),
+  socialMedia: Joi.object({
+    facebook: Joi.string().uri().allow("", null),
+    instagram: Joi.string().uri().allow("", null),
+  }).optional(),
+}).required();
+
 const updateRestaurantSchema = Joi.object({
-  name: Joi.string().max(255),
-  location: Joi.string().max(255),
-  cuisine: Joi.string().max(100),
-  rating: Joi.number().min(0).max(10).precision(1),
-  address: Joi.object().optional(),
-  coordinates: Joi.object().optional(),
-  opening_hours: Joi.object().optional(),
-  contact: Joi.object().optional(),
-}).min(1);
+  // Only allow contact updates via this endpoint
+  contact: contactSchema,
+}).required();
 
 module.exports = {
   updateRestaurantSchema,
