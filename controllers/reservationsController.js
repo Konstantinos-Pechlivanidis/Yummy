@@ -63,7 +63,6 @@ const isValidTransition = (from, to) => {
  * Unlock exactly one purchased coupon instance (if any).
  */
 const unlockOnePurchasedCoupon = async (client, { userId, couponId }) => {
-  // Pick one locked instance (if any) and unlock it
   const { rows: pick } = await client.query(
     `
       SELECT id FROM purchased_coupons
@@ -88,7 +87,6 @@ const unlockOnePurchasedCoupon = async (client, { userId, couponId }) => {
  * Returns the locked instance id (or null if none).
  */
 const lockOnePurchasedCoupon = async (client, { userId, couponId }) => {
-  // Pick one available (not used, not locked) and lock it
   const { rows: pick } = await client.query(
     `
       SELECT id FROM purchased_coupons
@@ -101,7 +99,10 @@ const lockOnePurchasedCoupon = async (client, { userId, couponId }) => {
   );
   if (pick.length === 0) return null;
 
-  await client.query(`UPDATE purchased_coupons SET is_locked = true WHERE id = $1`, [pick[0].id]);
+  await client.query(
+    `UPDATE purchased_coupons SET is_locked = true WHERE id = $1`,
+    [pick[0].id]
+  );
   return pick[0].id;
 };
 
@@ -136,7 +137,7 @@ const getUserReservations = async (req, res, pool) => {
 
   try {
     const { rows } = await pool.query(fetchReservationsByUser, [decoded.id]);
-    // ✅ Always 200 with an array
+    // Always 200 with an array
     return res.status(200).json(rows);
   } catch (err) {
     return res.status(500).json({ message: "Failed to load reservations." });
@@ -165,7 +166,6 @@ const createReservation = async (req, res, pool) => {
   if (!decoded) return;
 
   try {
-    // ✅ Fixed identifier: getConfirmedUserStatus
     const {
       rows: [{ confirmed_user: isUserConfirmed }],
     } = await pool.query(getConfirmedUserStatus, [decoded.id]);
@@ -275,9 +275,10 @@ const cancelReservation = async (req, res, pool) => {
   try {
     await client.query("BEGIN");
 
-    // Get reservation owned by this user
+    // Reservation owned by this user
     const { rows: rows0 } = await client.query(
-      "SELECT id, user_id, restaurant_id, date, time, status, coupon_id FROM reservations WHERE id = $1 AND user_id = $2",
+      `SELECT id, user_id, restaurant_id, date, time, status, coupon_id
+       FROM reservations WHERE id = $1 AND user_id = $2`,
       [id, decoded.id]
     );
     if (rows0.length === 0) {
@@ -289,13 +290,15 @@ const cancelReservation = async (req, res, pool) => {
     const resv = rows0[0];
 
     // Compute hours until reservation
-    const dateObj = new Date(Date.UTC(resv.date.getFullYear(), resv.date.getMonth(), resv.date.getDate()));
+    const dateObj = new Date(
+      Date.UTC(resv.date.getFullYear(), resv.date.getMonth(), resv.date.getDate())
+    );
     const [hh, mm, ss] = String(resv.time).split(":").map(Number);
     const reservationDateTimeUTC = new Date(dateObj);
     reservationDateTimeUTC.setUTCHours(hh || 0, mm || 0, ss || 0, 0);
     const diffInHours = (reservationDateTimeUTC - new Date()) / (1000 * 60 * 60);
 
-    // Update reservation -> cancelled with reason
+    // Update to cancelled
     const { rows } = await client.query(cancelReservationQuery, [
       reason.trim(),
       id,
@@ -328,6 +331,10 @@ const cancelReservation = async (req, res, pool) => {
   }
 };
 
+/**
+ * User filtered list (uses the parametrized queries).
+ * Query: ?status=&date=YYYY-MM-DD&page=&pageSize=
+ */
 const getFilteredReservations = async (req, res, pool) => {
   const decoded = verifyToken(req, res);
   if (!decoded) return;
@@ -337,53 +344,18 @@ const getFilteredReservations = async (req, res, pool) => {
   const offset = (page - 1) * pageSize;
   const limit = pageSize;
 
-  const filters = [];
-  const values = [];
-  let idx = 1;
-
-  if (req.query.status) {
-    filters.push(`r.status ILIKE $${idx}`);
-    values.push(`%${req.query.status}%`);
-    idx++;
-  }
-
-  if (req.query.date) {
-    filters.push(`r.date = $${idx}`);
-    values.push(req.query.date);
-    idx++;
-  }
-
-  filters.push(`r.user_id = $${idx}`);
-  values.push(decoded.id);
-  idx++;
-
-  const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
-
-  const dataQuery = `
-    SELECT 
-      r.*,
-      sm.id AS sm_id,
-      sm.name AS sm_name,
-      sm.description AS sm_description,
-      c.id AS c_id,
-      c.description AS c_description
-    FROM reservations r
-    LEFT JOIN special_menus sm ON r.special_menu_id = sm.id
-    LEFT JOIN coupons c ON r.coupon_id = c.id
-    ${whereClause}
-    ORDER BY r.date DESC, r.time DESC
-    LIMIT $${idx} OFFSET $${idx + 1}
-  `;
-
-  const countQuery = `
-    SELECT COUNT(*) FROM reservations r
-    ${whereClause}
-  `;
+  const statusPattern = req.query.status ? `%${req.query.status}%` : null;
+  const dateParam = req.query.date || null;
 
   try {
-    values.push(limit, offset);
+    const { rows } = await pool.query(fetchFilteredUserReservations, [
+      decoded.id,
+      statusPattern,
+      dateParam,
+      limit,
+      offset,
+    ]);
 
-    const { rows } = await pool.query(dataQuery, values);
     const formatted = rows.map((r) => {
       const {
         sm_id,
@@ -393,7 +365,6 @@ const getFilteredReservations = async (req, res, pool) => {
         c_description,
         ...base
       } = r;
-
       return {
         ...base,
         special_menu: sm_id
@@ -403,21 +374,20 @@ const getFilteredReservations = async (req, res, pool) => {
       };
     });
 
-    const countValues = values.slice(0, values.length - 2);
-    const { rows: countRows } = await pool.query(countQuery, countValues);
+    const { rows: countRows } = await pool.query(
+      countFilteredUserReservations,
+      [decoded.id, statusPattern, dateParam]
+    );
     const totalCount = parseInt(countRows[0].count, 10);
 
-    const currentPage = page;
-    const recordsOnCurrentPage = formatted.length;
-    const viewedRecords = (currentPage - 1) * pageSize + recordsOnCurrentPage;
+    const viewedRecords = (page - 1) * pageSize + formatted.length;
     const remainingRecords = totalCount - viewedRecords;
 
-    // ✅ Always 200 with array
     return res.json({
       reservations: formatted,
       Pagination: {
-        currentPage,
-        recordsOnCurrentPage,
+        currentPage: page,
+        recordsOnCurrentPage: formatted.length,
         viewedRecords,
         remainingRecords,
         total: totalCount,
@@ -428,6 +398,9 @@ const getFilteredReservations = async (req, res, pool) => {
   }
 };
 
+/**
+ * Owner changes status with transaction + side effects.
+ */
 const patchReservationAsOwner = async (req, res, pool) => {
   const decoded = verifyToken(req, res);
   if (!decoded) return;
@@ -509,7 +482,9 @@ const patchReservationAsOwner = async (req, res, pool) => {
 
     // Award points on completed
     if (nextStatus === "completed") {
-      const { rows: up } = await client.query(fetchUserPoints, [current.user_id]);
+      const { rows: up } = await client.query(fetchUserPoints, [
+        current.user_id,
+      ]);
       const pts = up[0]?.loyalty_points || 0;
       const newPts = pts + 10;
       await client.query(updateUserPointsQuery, [newPts, current.user_id]);
@@ -528,6 +503,10 @@ const patchReservationAsOwner = async (req, res, pool) => {
   }
 };
 
+/**
+ * Owner filtered list (parametrized query; no extra string concatenation).
+ * Query: ?status=&date=YYYY-MM-DD&page=&pageSize=
+ */
 const getOwnerFilteredReservations = async (req, res, pool) => {
   const decoded = verifyToken(req, res);
   if (!decoded) return;
@@ -544,44 +523,19 @@ const getOwnerFilteredReservations = async (req, res, pool) => {
   const offset = (page - 1) * pageSize;
   const limit = pageSize;
 
-  const filters = [];
-  const values = [decoded.id];
-  let idx = 2;
-
-  if (req.query.status) {
-    filters.push(`r.status ILIKE $${idx}`);
-    values.push(`%${req.query.status}%`);
-    idx++;
-  }
-
-  if (req.query.date) {
-    // Compare on local day for Europe/Athens
-    filters.push(
-      `(r.date AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Athens')::date = $${idx}`
-    );
-    values.push(req.query.date);
-    idx++;
-  }
-
-  const whereClause = filters.length ? ` AND ${filters.join(" AND ")}` : "";
+  const statusPattern = req.query.status ? `%${req.query.status}%` : null;
+  const dateParam = req.query.date || null;
 
   try {
-    const dataQuery = `
-      ${fetchOwnerFilteredReservations}
-      ${whereClause}
-      ORDER BY r.date DESC, r.time ASC
-      LIMIT $${idx} OFFSET $${idx + 1}
-    `;
-    values.push(limit, offset);
+    const { rows: reservations } = await pool.query(
+      fetchOwnerFilteredReservations,
+      [decoded.id, statusPattern, dateParam, limit, offset]
+    );
 
-    const { rows: reservations } = await pool.query(dataQuery, values);
-
-    const countQuery = `
-      ${countOwnerFilteredReservations}
-      ${whereClause}
-    `;
-    const countValues = values.slice(0, idx - 1);
-    const { rows: countRows } = await pool.query(countQuery, countValues);
+    const { rows: countRows } = await pool.query(
+      countOwnerFilteredReservations,
+      [decoded.id, statusPattern, dateParam]
+    );
     const totalCount = parseInt(countRows[0].count, 10);
 
     const currentPage = page;

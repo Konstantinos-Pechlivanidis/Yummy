@@ -1,4 +1,6 @@
 // controllers/restaurantController.js
+require("dotenv").config();
+const jwt = require("jsonwebtoken");
 
 const {
   fetchRestaurantById,
@@ -13,23 +15,42 @@ const {
   countFilteredRestaurantsBase,
   verifyRestaurantOwnership,
   fetchRestaurantsByOwner,
-  updateRestaurantContactQuery
+  updateRestaurantContactQuery,
 } = require("../queries/restaurantQueries");
 
-// 👇 Import the reservations query
 const {
-  fetchOwnerFilteredReservations,
+  fetchOwnerFilteredReservations, // expects 5 params: ownerId, statusPatternOrNull, dateOrNull, limit, offset
 } = require("../queries/reservationsQueries");
 
 const { updateRestaurantSchema } = require("../validators/restaurantValidator");
 
-const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET;
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
+const verifyToken = (req, res) => {
+  const token = req.cookies.token;
+  if (!token) {
+    res.status(401).json({ message: "Unauthorized - No token found" });
+    return null;
+  }
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    res.clearCookie("token");
+    res.status(401).json({ message: "Unauthorized - Invalid token" });
+    return null;
+  }
+};
+
+/* ------------------------------------------------------------------ */
+/* Public listings                                                    */
+/* ------------------------------------------------------------------ */
 
 const getTrendingRestaurants = async (req, res, pool) => {
   const page = parseInt(req.query.page, 10) || 1;
   const pageSize = parseInt(req.query.pageSize, 10) || 10;
-
   const offset = (page - 1) * pageSize;
   const limit = pageSize;
 
@@ -38,75 +59,69 @@ const getTrendingRestaurants = async (req, res, pool) => {
       limit,
       offset,
     ]);
+    const rows = trendingRestaurants.rows;
 
-    const allTrendingRestaurants = trendingRestaurants.rows;
-
-    if (allTrendingRestaurants.length === 0) {
-      return res.status(404).json({ error: "Not trending restaurants found." });
+    if (rows.length === 0) {
+      return res.status(200).json({
+        allTrendingRestaurants: [],
+        Pagination: {
+          currentPage: page,
+          recordsOnCurrentPage: 0,
+          viewedRecords: 0,
+          remainingRecords: 0,
+          total: 0,
+        },
+      });
     }
 
     const countResult = await pool.query(getRestaurantsTotal);
     const totalCount = parseInt(countResult.rows[0].count, 10);
 
-    // Calculate pagination information
-    const currentPage = page;
-    const recordsOnCurrentPage = allTrendingRestaurants.length;
-    const viewedRecords = (currentPage - 1) * pageSize + recordsOnCurrentPage;
+    const viewedRecords = (page - 1) * pageSize + rows.length;
     const remainingRecords = totalCount - viewedRecords;
 
     res.json({
-      allTrendingRestaurants,
+      allTrendingRestaurants: rows,
       Pagination: {
-        currentPage: currentPage,
-        recordsOnCurrentPage: recordsOnCurrentPage,
-        viewedRecords: viewedRecords,
-        remainingRecords: remainingRecords,
+        currentPage: page,
+        recordsOnCurrentPage: rows.length,
+        viewedRecords,
+        remainingRecords,
         total: totalCount,
       },
     });
   } catch (err) {
-    console.error("Error fetching testimonials:", err);
-    res.status(500).json({ message: "Failed to load testimonials." });
+    console.error("Error fetching trending restaurants:", err);
+    res.status(500).json({ message: "Failed to load trending restaurants." });
   }
 };
 
 const getDiscountedRestaurants = async (req, res, pool) => {
   const page = parseInt(req.query.page, 10) || 1;
   const pageSize = parseInt(req.query.pageSize, 10) || 10;
-
   const offset = (page - 1) * pageSize;
   const limit = pageSize;
 
   try {
-    const discountedRestaurants = await pool.query(fetchDiscountedRestaurants, [
-      limit,
-      offset,
-    ]);
-
-    const allDiscountedRestaurants = discountedRestaurants.rows;
-
-    if (allDiscountedRestaurants.length === 0) {
-      return res
-        .status(404)
-        .json({ error: "No restaurants with discounts found." });
-    }
+    const discountedRestaurants = await pool.query(
+      fetchDiscountedRestaurants,
+      [limit, offset]
+    );
+    const rows = discountedRestaurants.rows;
 
     const countResult = await pool.query(totalDiscountedRestaurants);
     const totalCount = parseInt(countResult.rows[0].count, 10);
 
-    // Calculate pagination information
-    const currentPage = page;
-    const recordsOnCurrentPage = allDiscountedRestaurants.length; // This will be pageSize or less if it's the last page
-    const viewedRecords = (currentPage - 1) * pageSize + recordsOnCurrentPage;
+    const viewedRecords = (page - 1) * pageSize + rows.length;
     const remainingRecords = totalCount - viewedRecords;
 
     res.json({
-      allDiscountedRestaurants,
+      allDiscountedRestaurants: rows,
       Pagination: {
-        currentPage: currentPage,
-        recordsOnCurrentPage: recordsOnCurrentPage,
-        viewedRecords: viewedRecords,
-        remainingRecords: remainingRecords,
+        currentPage: page,
+        recordsOnCurrentPage: rows.length,
+        viewedRecords,
+        remainingRecords,
         total: totalCount,
       },
     });
@@ -117,13 +132,11 @@ const getDiscountedRestaurants = async (req, res, pool) => {
 };
 
 const getFilteredRestaurants = async (req, res, pool) => {
-  // 1) Parse pagination
   const page = parseInt(req.query.page, 10) || 1;
   const pageSize = parseInt(req.query.pageSize, 10) || 10;
   const offset = (page - 1) * pageSize;
   const limit = pageSize;
 
-  // 2) Build dynamic WHERE clause
   const filters = [];
   const values = [];
   let idx = 1;
@@ -133,22 +146,19 @@ const getFilteredRestaurants = async (req, res, pool) => {
     values.push(`%${req.query.cuisine}%`);
     idx++;
   }
-
   if (req.query.rating) {
     const rating = parseFloat(req.query.rating);
-    if (!isNaN(rating) && rating >= 1.0 && rating <= 5.0) {
+    if (!isNaN(rating) && rating >= 1 && rating <= 5) {
       filters.push(`rating >= $${idx}`);
       values.push(rating);
       idx++;
     }
   }
-
   if (req.query.location) {
     filters.push(`location ILIKE $${idx}`);
     values.push(`%${req.query.location}%`);
     idx++;
   }
-
   if (req.query.name) {
     filters.push(`name ILIKE $${idx}`);
     values.push(`%${req.query.name}%`);
@@ -158,7 +168,6 @@ const getFilteredRestaurants = async (req, res, pool) => {
   const whereClause = filters.length ? ` WHERE ${filters.join(" AND ")}` : "";
 
   try {
-    // 3) Fetch the page of data
     const dataQuery = `
       ${fetchFilteredRestaurantsBase}
       ${whereClause}
@@ -167,36 +176,24 @@ const getFilteredRestaurants = async (req, res, pool) => {
     `;
     values.push(limit, offset);
 
-    const { rows: restaurants } = await pool.query(dataQuery, values);
+    const { rows } = await pool.query(dataQuery, values);
 
-    if (!restaurants.length) {
-      return res
-        .status(404)
-        .json({ error: "No restaurants found matching filters." });
-    }
-
-    // 4) Fetch the total count
     const countQuery = `
       ${countFilteredRestaurantsBase}
       ${whereClause}
     `;
-    // count uses only the filter params (not limit/offset)
     const countValues = values.slice(0, idx - 1);
     const { rows: countRows } = await pool.query(countQuery, countValues);
     const totalCount = parseInt(countRows[0].count, 10);
 
-    // 5) Build pagination metadata
-    const currentPage = page;
-    const recordsOnCurrentPage = restaurants.length;
-    const viewedRecords = (currentPage - 1) * pageSize + recordsOnCurrentPage;
+    const viewedRecords = (page - 1) * pageSize + rows.length;
     const remainingRecords = totalCount - viewedRecords;
 
-    // 6) Send response
     res.json({
-      restaurants,
+      restaurants: rows,
       Pagination: {
-        currentPage,
-        recordsOnCurrentPage,
+        currentPage: page,
+        recordsOnCurrentPage: rows.length,
         viewedRecords,
         remainingRecords,
         total: totalCount,
@@ -210,33 +207,23 @@ const getFilteredRestaurants = async (req, res, pool) => {
 
 const getRestaurantById = async (req, res, pool) => {
   const { id } = req.params;
-
   try {
-    // 1) Core restaurant data
     const restRes = await pool.query(fetchRestaurantById, [id]);
     if (restRes.rows.length === 0) {
       return res.status(404).json({ error: "Restaurant not found." });
     }
-    const restaurant = restRes.rows[0];
 
-    // 2) Related data
     const [menuRes, specialRes, couponRes] = await Promise.all([
       pool.query(fetchMenuItemsByRestaurant, [id]),
       pool.query(fetchSpecialMenusByRestaurant, [id]),
       pool.query(fetchCouponsByRestaurant, [id]),
     ]);
 
-    // 3) Always return arrays — even if empty
-    const menu_items = Array.isArray(menuRes.rows) ? menuRes.rows : [];
-    const special_menus = Array.isArray(specialRes.rows) ? specialRes.rows : [];
-    const coupons = Array.isArray(couponRes.rows) ? couponRes.rows : [];
-
-    // 4) Respond
     res.json({
-      restaurant,
-      menu_items,
-      special_menus,
-      coupons,
+      restaurant: restRes.rows[0],
+      menu_items: menuRes.rows || [],
+      special_menus: specialRes.rows || [],
+      coupons: couponRes.rows || [],
     });
   } catch (err) {
     console.error("Error fetching restaurant details:", err);
@@ -244,36 +231,43 @@ const getRestaurantById = async (req, res, pool) => {
   }
 };
 
+/* ------------------------------------------------------------------ */
+/* Owner endpoints                                                    */
+/* ------------------------------------------------------------------ */
+
 const getOwnerRestaurant = async (req, res, pool) => {
-  const token = req.cookies.token;
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized - No token found" });
-  }
+  const decoded = verifyToken(req, res);
+  if (!decoded) return;
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
     const { rows: restaurantRows } = await pool.query(fetchRestaurantsByOwner, [
       decoded.id,
     ]);
 
     if (restaurantRows.length === 0) {
       return res
-        .status(404)
-        .json({ error: "No restaurants found for this owner." });
+        .status(200)
+        .json({ restaurant: null, message: "No restaurants for this owner." });
     }
 
     const restaurant = restaurantRows[0];
 
-    // Fetch all related data in parallel for efficiency
+    // IMPORTANT: Pass all 5 params expected by fetchOwnerFilteredReservations
+    // ownerId, statusPatternOrNull, dateOrNull, limit, offset
     const [menuRes, specialMenuRes, couponRes, reservationRes] =
       await Promise.all([
         pool.query(fetchMenuItemsByRestaurant, [restaurant.id]),
         pool.query(fetchSpecialMenusByRestaurant, [restaurant.id]),
         pool.query(fetchCouponsByRestaurant, [restaurant.id]),
-        pool.query(fetchOwnerFilteredReservations, [decoded.id]),
+        pool.query(fetchOwnerFilteredReservations, [
+          decoded.id,
+          null, // status filter
+          null, // date filter
+          50, // limit
+          0, // offset
+        ]),
       ]);
 
-    // Combine all data into a single response object
     const responseData = {
       ...restaurant,
       menu_items: menuRes.rows || [],
@@ -289,19 +283,86 @@ const getOwnerRestaurant = async (req, res, pool) => {
   }
 };
 
-const updateRestaurant = async (req, res, pool) => {
-  const token = req.cookies.token;
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized - No token found" });
-  }
+const getOwnerOverview = async (req, res, pool) => {
+  const decoded = verifyToken(req, res);
+  if (!decoded) return;
 
-  let decoded;
   try {
-    decoded = jwt.verify(token, JWT_SECRET);
+    // All restaurants for this owner
+    const { rows: restaurants } = await pool.query(fetchRestaurantsByOwner, [
+      decoded.id,
+    ]);
+
+    if (restaurants.length === 0) {
+      return res.status(200).json({ restaurants: [] });
+    }
+
+    const ids = restaurants.map((r) => r.id);
+
+    // Aggregate counts in parallel
+    const [
+      reservationsCountRes,
+      couponsCountRes,
+      specialMenusCountRes,
+    ] = await Promise.all([
+      pool.query(
+        `SELECT restaurant_id, COUNT(*)::int AS cnt
+         FROM reservations
+         WHERE restaurant_id = ANY($1)
+         GROUP BY restaurant_id`,
+        [ids]
+      ),
+      pool.query(
+        `SELECT restaurant_id, COUNT(*)::int AS cnt
+         FROM coupons
+         WHERE restaurant_id = ANY($1)
+         GROUP BY restaurant_id`,
+        [ids]
+      ),
+      pool.query(
+        `SELECT restaurant_id, COUNT(*)::int AS cnt
+         FROM special_menus
+         WHERE restaurant_id = ANY($1)
+         GROUP BY restaurant_id`,
+        [ids]
+      ),
+    ]);
+
+    const byId = (rows) =>
+      rows.reduce((acc, r) => {
+        acc[r.restaurant_id] = r.cnt;
+        return acc;
+      }, {});
+
+    const resCounts = byId(reservationsCountRes.rows);
+    const couponCounts = byId(couponsCountRes.rows);
+    const smCounts = byId(specialMenusCountRes.rows);
+
+    const overview = restaurants.map((r) => ({
+      id: r.id,
+      name: r.name,
+      location: r.location,
+      rating: r.rating,
+      address: r.address,
+      contact: r.contact,
+      opening_hours: r.opening_hours,
+      totals: {
+        reservations: resCounts[r.id] || 0,
+        coupons: couponCounts[r.id] || 0,
+        special_menus: smCounts[r.id] || 0,
+      },
+    }));
+
+    res.json({ restaurants: overview });
   } catch (err) {
-    res.clearCookie("token");
-    return res.status(401).json({ message: "Unauthorized - Invalid token" });
+    console.error("Error building owner overview:", err);
+    res.status(500).json({ message: "Failed to load overview." });
   }
+};
+
+const updateRestaurant = async (req, res, pool) => {
+  const decoded = verifyToken(req, res);
+  if (!decoded) return;
 
   const { id } = req.params;
   const { error, value } = updateRestaurantSchema.validate(req.body);
@@ -312,17 +373,18 @@ const updateRestaurant = async (req, res, pool) => {
   }
 
   try {
-    const ownershipResult = await pool.query(verifyRestaurantOwnership, [
+    // owner is allowed to update only their own restaurant
+    const ownership = await pool.query(verifyRestaurantOwnership, [
       id,
       decoded.id,
     ]);
-    if (ownershipResult.rowCount === 0) {
+    if (ownership.rowCount === 0) {
       return res
         .status(403)
         .json({ message: "Forbidden - You do not own this restaurant." });
     }
 
-    // 🔒 Hard whitelist: only contact JSONB is updatable here
+    // Hard whitelist: only 'contact' JSONB is accepted
     const contact = value?.contact;
     if (contact === undefined) {
       return res
@@ -334,9 +396,7 @@ const updateRestaurant = async (req, res, pool) => {
       typeof contact !== "object" ||
       Array.isArray(contact)
     ) {
-      return res
-        .status(400)
-        .json({ message: "'contact' must be a JSON object." });
+      return res.status(400).json({ message: "'contact' must be a JSON object." });
     }
 
     const { rows } = await pool.query(updateRestaurantContactQuery, [
@@ -349,16 +409,18 @@ const updateRestaurant = async (req, res, pool) => {
       .json({ message: "Restaurant updated", restaurant: rows[0] });
   } catch (err) {
     console.error("Error updating restaurant:", err);
-    return res.status(500).json({ message: "Failed to update restaurant." });
+    res.status(500).json({ message: "Failed to update restaurant." });
   }
 };
+
+/* ------------------------------------------------------------------ */
 
 module.exports = {
   getTrendingRestaurants,
   getDiscountedRestaurants,
   getFilteredRestaurants,
   getRestaurantById,
-  updateRestaurant,
   getOwnerRestaurant,
-  updateRestaurant
+  getOwnerOverview,
+  updateRestaurant,
 };
