@@ -3,13 +3,18 @@ const { Pool } = require("pg");
 const { PGHOST, PGDATABASE, PGUSER, PGPASSWORD, NODE_ENV } = process.env;
 
 // Postgres pool of connections
+// Neon requires SSL connections - detect if using Neon by checking host
+const isNeon = PGHOST && (PGHOST.includes("neon.tech") || PGHOST.includes("aws.neon.tech"));
+
 const pool = new Pool({
   host: PGHOST,
   database: PGDATABASE,
   user: PGUSER,
   password: PGPASSWORD,
-  ssl: NODE_ENV === "production" 
-    ? { rejectUnauthorized: true } 
+  // Neon always requires SSL. For production, use strict SSL validation
+  // For development/testing with Neon or other cloud providers, allow self-signed certs
+  ssl: isNeon || NODE_ENV === "production"
+    ? { rejectUnauthorized: NODE_ENV === "production" }
     : false,
   // Connection pool configuration
   max: 20, // Maximum number of clients in the pool
