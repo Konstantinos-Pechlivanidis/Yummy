@@ -28,7 +28,6 @@ node scripts/seed.js
   - Πραγματικές ελληνικές πόλεις
   - Addresses, coordinates, opening hours
   - **Rating** (3.5-5.0 ⭐) - για trending endpoint
-  - **Total reviews** (10-210) - για trending endpoint
 - **Menu Items** για κάθε restaurant (5-6 πιάτα ανάλογα με την κουζίνα)
 - **Coupons** (2-3 ανά restaurant)
 - **Special Menus** (1-3 ανά restaurant) - για discounted endpoint

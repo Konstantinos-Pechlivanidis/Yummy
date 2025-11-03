@@ -303,7 +303,6 @@ async function seedRestaurants(ownerIds) {
     // Generate realistic ratings for trending endpoint
     // Rating between 3.5 and 5.0 (realistic restaurant ratings)
     const rating = parseFloat((Math.random() * 1.5 + 3.5).toFixed(1));
-    const totalReviews = Math.floor(Math.random() * 200) + 10; // 10-210 reviews
 
     try {
       // Check if restaurant already exists for this owner
@@ -316,21 +315,24 @@ async function seedRestaurants(ownerIds) {
         restaurantIds.push(existing.rows[0].id);
         console.log(`  - Restaurant ${name} already exists for owner ${ownerId}`);
         
-        // Update rating if restaurant exists but doesn't have one
+        // Always update rating to ensure it has a value for trending endpoint
         try {
-          await pool.query(
-            `UPDATE restaurants SET rating = $1, total_reviews = $2 WHERE id = $3 AND rating IS NULL`,
-            [rating, totalReviews, existing.rows[0].id]
+          const updateResult = await pool.query(
+            `UPDATE restaurants SET rating = $1 WHERE id = $2 AND (rating IS NULL OR rating = 0)`,
+            [rating, existing.rows[0].id]
           );
+          if (updateResult.rowCount > 0) {
+            console.log(`    ✓ Updated rating to ${rating}⭐ for existing restaurant`);
+          }
         } catch (e) {
-          // Ignore if rating column doesn't exist or already set
+          // Ignore if rating column doesn't exist
         }
       } else {
         const result = await pool.query(
-          `INSERT INTO restaurants (name, location, cuisine, address, coordinates, opening_hours, contact, owner_id, rating, total_reviews)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO restaurants (name, location, cuisine, address, coordinates, opening_hours, contact, owner_id, rating)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING id`,
-          [name, location, cuisine, address, coordinates, openingHours, contact, ownerId, rating, totalReviews]
+          [name, location, cuisine, address, coordinates, openingHours, contact, ownerId, rating]
         );
 
         if (result.rows.length > 0) {
@@ -340,6 +342,34 @@ async function seedRestaurants(ownerIds) {
       }
     } catch (error) {
       console.error(`  ✗ Failed to create restaurant ${name}:`, error.message);
+    }
+  }
+
+  // IMPORTANT: Update ALL existing restaurants that don't have ratings
+  // This ensures trending endpoint works even for restaurants created before this fix
+  try {
+    // Get all restaurants without ratings
+    const restaurantsWithoutRatings = await pool.query(
+      `SELECT id FROM restaurants WHERE rating IS NULL OR rating = 0`
+    );
+
+    if (restaurantsWithoutRatings.rows.length > 0) {
+      let updatedCount = 0;
+      for (const row of restaurantsWithoutRatings.rows) {
+        const rating = parseFloat((Math.random() * 1.5 + 3.5).toFixed(1));
+        
+        await pool.query(
+          `UPDATE restaurants SET rating = $1 WHERE id = $2`,
+          [rating, row.id]
+        );
+        updatedCount++;
+      }
+      console.log(`  ✓ Updated ratings for ${updatedCount} existing restaurants without ratings`);
+    }
+  } catch (e) {
+    // Column might not exist, ignore
+    if (!e.message.includes("does not exist")) {
+      console.warn(`  ⚠ Could not update ratings for existing restaurants:`, e.message);
     }
   }
 

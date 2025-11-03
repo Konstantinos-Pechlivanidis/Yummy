@@ -10,7 +10,8 @@
     "test:integration": "jest --testPathPattern=integration",
     "test:unit": "jest --testPathPattern=unit",
     "test:checklist": "node tests/test-checklist-generator.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "update-ratings": "node scripts/update-ratings.js"
   },
   "keywords": [],
   "author": "",
