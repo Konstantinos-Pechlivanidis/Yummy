@@ -9,7 +9,8 @@
     "test:watch": "jest --watch",
     "test:integration": "jest --testPathPattern=integration",
     "test:unit": "jest --testPathPattern=unit",
-    "test:checklist": "node tests/test-checklist-generator.js"
+    "test:checklist": "node tests/test-checklist-generator.js",
+    "seed": "node scripts/seed.js"
   },
   "keywords": [],
   "author": "",
