@@ -9,9 +9,15 @@ const jwt = require("jsonwebtoken");
 const passport = require("passport");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-const { v4: uuidv4 } = require("uuid");
 
-const { JWT_SECRET, NODE_ENV, FRONT_END_URL, envPORT } = process.env;
+const { NODE_ENV, FRONT_END_URL, envPORT } = process.env;
+const {
+  generateToken,
+  verifyTokenFromCookie,
+  setTokenCookie,
+  clearTokenCookie,
+} = require("../utils/jwtHelper");
+const logger = require("../utils/logger");
 
 const {
   userSchema,
@@ -43,29 +49,15 @@ const googleAuthCallback = async (req, res, pool) => {
     async (err, user) => {
       if (!user) return res.redirect("/");
 
-      // Πάρε τα πλήρη δεδομένα χρήστη από DB
+      // Get full user data from database
       const dbUser = await pool.query(getUserByEmail, [user.email]);
       const fullUser = dbUser.rows[0];
 
-      const payload = {
-        id: fullUser.id,
-        name: fullUser.name,
-        email: fullUser.email,
-        role: fullUser.role,
-        confirmed_user: fullUser.confirmed_user,
-      };
+      const token = generateToken(fullUser);
+      setTokenCookie(res, token);
 
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
-
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: NODE_ENV === "production",
-        path: "/",
-        sameSite: "Lax",
-        maxAge: 24 * 60 * 60 * 1000,
-      });
-
-      return res.redirect("http://localhost:3000/auth-redirect");
+      const redirectUrl = `${FRONT_END_URL}${envPORT ? `:${envPORT}` : ""}/auth-redirect`;
+      return res.redirect(redirectUrl);
     }
   )(req, res);
 };
@@ -73,24 +65,19 @@ const googleAuthCallback = async (req, res, pool) => {
 
 /** Check Authentication Status */
 const checkAuthStatus = (req, res) => {
-  const token = req.cookies.token;
-  if (!token) {
+  const decoded = verifyTokenFromCookie(req);
+  if (!decoded) {
+    clearTokenCookie(res);
     return res.json({ loggedIn: false });
   }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    res.json({ loggedIn: true, user: decoded });
-  } catch (err) {
-    res.clearCookie("token");
-    res.json({ loggedIn: false });
-  }
+  res.json({ loggedIn: true, user: decoded });
 };
 
 
 /** Logout */
 const logoutUser = (req, res) => {
-  res.clearCookie("token");
+  clearTokenCookie(res);
   res.redirect("/");
 };
 
@@ -134,35 +121,25 @@ const registerUser = async (req, res, pool) => {
 
     const newUser = result.rows[0];
 
-    // Προαιρετικά: στείλε email επιβεβαίωσης
+    // Optionally send verification email
     await sendVerificationEmail(newUser);
 
-    // ➕ Αυτόματο login
-    const payload = {
-      id: newUser.id,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      confirmed_user: newUser.confirmed_user,
-    };
+    // Auto login after registration
+    const token = generateToken(newUser);
+    setTokenCookie(res, token);
 
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "30m" });
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: NODE_ENV === "production",
-      path: "/",
-      sameSite: "Lax",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
-
-    // ➕ Επιστρέφεις και τα user data αν θες
     res.status(201).json({
-      message: "Εγγραφή επιτυχής",
-      user: payload,
+      message: "Registration successful",
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        confirmed_user: newUser.confirmed_user,
+      },
     });
   } catch (err) {
-    console.error("Error in registerUser:", err);
+    logger.error("Error in registerUser", { error: err.message, stack: err.stack });
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -188,30 +165,21 @@ const loginUser = async (req, res, pool) => {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
-    const payload = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      confirmed_user: user.confirmed_user,
-    };
-
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "30m" });
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: NODE_ENV === "production",
-      path: "/",
-      sameSite: "Lax",
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
-    });
+    const token = generateToken(user);
+    setTokenCookie(res, token);
 
     res.json({
       message: "Login successful",
-      user: payload,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        confirmed_user: user.confirmed_user,
+      },
     });
   } catch (error) {
-    console.error("Error during login:", error.message);
+    logger.error("Error during login", { error: error.message, stack: error.stack });
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -222,26 +190,11 @@ const loginUser = async (req, res, pool) => {
  */
 const updateUserDetails = async (req, res, pool) => {
   try {
-    console.log("🔍 Checking authentication via cookies...");
-
-    // ✅ Extract JWT token from cookies
-    const token = req.cookies.token;
-    if (!token) {
-      console.log("🚨 No token found in cookies");
-      return res.status(401).json({ message: "Unauthorized - No token found" });
+    const decoded = verifyTokenFromCookie(req);
+    if (!decoded) {
+      clearTokenCookie(res);
+      return res.status(401).json({ message: "Unauthorized - Invalid or missing token" });
     }
-
-    // ✅ Verify token and decode user data
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      console.log("🚨 Invalid token:", err);
-      res.clearCookie("token"); // Clear corrupted token
-      return res.status(401).json({ message: "Unauthorized - Invalid token" });
-    }
-
-    console.log("✅ Decoded user:", decoded);
     const user_id = decoded.id;
 
     // ✅ Validate input
@@ -253,11 +206,8 @@ const updateUserDetails = async (req, res, pool) => {
     // ✅ Fetch user from database
     const userQuery = await pool.query(getUserById, [user_id]);
     if (userQuery.rows.length === 0) {
-      console.log("🚨 User not found in database");
       return res.status(404).json({ message: "User not found" });
     }
-
-    console.log("✅ User found:", userQuery.rows[0]);
 
     // ✅ Hash password if provided
     let hashedPassword;
@@ -303,10 +253,9 @@ const updateUserDetails = async (req, res, pool) => {
       updateValues
     );
 
-    console.log("✅ User updated successfully:", result.rows[0]);
     res.json({ message: "User updated successfully", user: result.rows[0] });
   } catch (err) {
-    console.error("❌ Error in updateUserDetails:", err);
+    logger.error("Error in updateUserDetails", { error: err.message, stack: err.stack });
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -316,38 +265,21 @@ const updateUserDetails = async (req, res, pool) => {
  */
 const getUserProfile = async (req, res, pool) => {
   try {
-    console.log("🔍 Checking authentication via cookies...");
-
-    // ✅ Extract JWT token from cookies
-    const token = req.cookies.token;
-    if (!token) {
-      console.log("🚨 No token found in cookies");
-      return res.status(401).json({ message: "Unauthorized - No token found" });
+    const decoded = verifyTokenFromCookie(req);
+    if (!decoded) {
+      clearTokenCookie(res);
+      return res.status(401).json({ message: "Unauthorized - Invalid or missing token" });
     }
-
-    // ✅ Verify token and decode user data
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      console.log("🚨 Invalid token:", err);
-      res.clearCookie("token"); // Clear corrupted token
-      return res.status(401).json({ message: "Unauthorized - Invalid token" });
-    }
-
-    console.log("✅ Decoded user:", decoded);
 
     // ✅ Fetch user from database using decoded ID
     const userQuery = await pool.query(getUserById, [decoded.id]);
     if (userQuery.rows.length === 0) {
-      console.log("🚨 User not found in database");
       return res.status(404).json({ message: "User not found" });
     }
 
-    console.log("✅ User found:", userQuery.rows[0]);
     res.json(userQuery.rows[0]);
   } catch (error) {
-    console.error("❌ Error in getUserProfile:", error);
+    logger.error("Error in getUserProfile", { error: error.message, stack: error.stack });
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -360,11 +292,10 @@ const verifyEmail = async (req, res, pool) => {
       return res.status(400).json({ error: "Invalid or expired token" });
 
     // Verify token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Update user as verified
-    const setconfirmed_user = await pool.query(confirmUser, [decoded.id]);
-    console.log(setconfirmed_user);
+    await pool.query(confirmUser, [decoded.id]);
     res.json({ message: "Email verified successfully. You can now log in." });
   } catch (error) {
     res.status(500).json({ message: "Invalid or expired token" });
@@ -394,7 +325,7 @@ const resendVerificationEmail = async (req, res, pool) => {
 
     res.json({ message: "Verification email resent! Check your inbox." });
   } catch (error) {
-    console.error("Error in resendVerificationEmail:", error);
+    logger.error("Error in resendVerificationEmail", { error: error.message, stack: error.stack });
     res.status(500).json({
       message: "Error resending verification email. Please try again later.",
     });
@@ -409,29 +340,15 @@ const facebookAuthCallback = async (req, res, pool) => {
     async (err, user) => {
       if (!user) return res.redirect("/");
 
-      // Πάρε τα πλήρη δεδομένα χρήστη από DB
+      // Get full user data from database
       const dbUser = await pool.query(getUserByEmail, [user.email]);
       const fullUser = dbUser.rows[0];
 
-      const payload = {
-        id: fullUser.id,
-        name: fullUser.name,
-        email: fullUser.email,
-        role: fullUser.role,
-        confirmed_user: fullUser.confirmed_user,
-      };
+      const token = generateToken(fullUser);
+      setTokenCookie(res, token);
 
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
-
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: NODE_ENV === "production",
-        path: "/",
-        sameSite: "Lax",
-        maxAge: 24 * 60 * 60 * 1000,
-      });
-
-      return res.redirect("http://localhost:3000/auth-redirect");
+      const redirectUrl = `${FRONT_END_URL}${envPORT ? `:${envPORT}` : ""}/auth-redirect`;
+      return res.redirect(redirectUrl);
     }
   )(req, res);
 };
@@ -439,26 +356,11 @@ const facebookAuthCallback = async (req, res, pool) => {
 
 const getUserPoints = async (req, res, pool) => {
   try {
-    console.log("🔍 Checking authentication via cookies...");
-
-    // ✅ Extract JWT token from cookies
-    const token = req.cookies.token;
-    if (!token) {
-      console.log("🚨 No token found in cookies");
-      return res.status(401).json({ message: "Unauthorized - No token found" });
+    const decoded = verifyTokenFromCookie(req);
+    if (!decoded) {
+      clearTokenCookie(res);
+      return res.status(401).json({ message: "Unauthorized - Invalid or missing token" });
     }
-
-    // ✅ Verify token and decode user data
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      console.log("🚨 Invalid token:", err);
-      res.clearCookie("token"); // Clear corrupted token
-      return res.status(401).json({ message: "Unauthorized - Invalid token" });
-    }
-
-    console.log("✅ Decoded user:", decoded);
 
     const user_id = decoded.id;
 
@@ -470,33 +372,18 @@ const getUserPoints = async (req, res, pool) => {
     const loyalty_points = points.rows[0].loyalty_points;
     res.json({ user_id, loyalty_points });
   } catch (error) {
-    console.error("Error fetching user points:", error);
+    logger.error("Error fetching user points", { error: error.message, stack: error.stack });
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
 const getFavorites = async (req, res, pool) => {
   try {
-    console.log("🔍 Checking authentication via cookies...");
-
-    // ✅ Extract JWT token from cookies
-    const token = req.cookies.token;
-    if (!token) {
-      console.log("🚨 No token found in cookies");
-      return res.status(401).json({ message: "Unauthorized - No token found" });
+    const decoded = verifyTokenFromCookie(req);
+    if (!decoded) {
+      clearTokenCookie(res);
+      return res.status(401).json({ message: "Unauthorized - Invalid or missing token" });
     }
-
-    // ✅ Verify token and decode user data
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      console.log("🚨 Invalid token:", err);
-      res.clearCookie("token"); // Clear corrupted token
-      return res.status(401).json({ message: "Unauthorized - Invalid token" });
-    }
-
-    console.log("✅ Decoded user:", decoded);
 
     const user_id = decoded.id;
 
@@ -538,24 +425,17 @@ const getFavorites = async (req, res, pool) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching user favorites:", error);
+    logger.error("Error fetching user favorites", { error: error.message, stack: error.stack });
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
 const toggleFavoriteController = async (req, res, pool) => {
   try {
-    const token = req.cookies.token;
-    if (!token) {
-      return res.status(401).json({ message: "Δεν είστε συνδεδεμένος." });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      res.clearCookie("token");
-      return res.status(401).json({ message: "Μη έγκυρο token." });
+    const decoded = verifyTokenFromCookie(req);
+    if (!decoded) {
+      clearTokenCookie(res);
+      return res.status(401).json({ message: "Unauthorized - Please log in" });
     }
 
     const user_id = decoded.id;
@@ -564,10 +444,10 @@ const toggleFavoriteController = async (req, res, pool) => {
     if (!restaurant_id) {
       return res
         .status(400)
-        .json({ error: "Λείπει το ID του εστιατορίου." });
+        .json({ error: "Restaurant ID is required." });
     }
 
-    // ✅ Έλεγχος αν ο χρήστης έχει επιβεβαιωθεί (confirmed_user)
+    // Check if user is confirmed (confirmed_user)
     const userResult = await pool.query(
       "SELECT confirmed_user FROM users WHERE id = $1",
       [user_id]
@@ -577,7 +457,7 @@ const toggleFavoriteController = async (req, res, pool) => {
     if (!isConfirmed) {
       return res
         .status(403)
-        .json({ message: "Πρέπει να επιβεβαιώσεις τον λογαριασμό σου." });
+        .json({ message: "Please verify your email address to continue." });
     }
 
     const checkForFavorites = await pool.query(checkFavorites, [
@@ -593,8 +473,8 @@ const toggleFavoriteController = async (req, res, pool) => {
       return res.status(201).json({ added: true });
     }
   } catch (error) {
-    console.error("Error toggling favorite:", error);
-    res.status(500).json({ error: "Κάτι πήγε στραβά." });
+    logger.error("Error toggling favorite", { error: error.message, stack: error.stack });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -633,7 +513,7 @@ const requestResetPassword = async (req, res, pool) => {
 
     res.json({ message: "Reset link sent. Check your email." });
   } catch (err) {
-    console.error("❌ Error in requestPasswordReset:", err);
+    logger.error("Error in requestPasswordReset", { error: err.message, stack: err.stack });
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -676,7 +556,7 @@ const resetPassword = async (req, res, pool) => {
 
     res.json({ message: "Password successfully updated." });
   } catch (err) {
-    console.error("❌ Error in resetPassword:", err);
+    logger.error("Error in resetPassword", { error: err.message, stack: err.stack });
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -699,15 +579,16 @@ const checkResetPasswordToken = async (req, res, pool) => {
     if (new Date() > new Date(resetRequest.expires_at)) {
       return res.status(400).json({ message: "Reset token has expired." });
     }
+
+    res.json({ message: "Token is valid" });
   } catch (err) {
-    console.error("❌ Error in resetPassword:", err);
+    logger.error("Error in checkResetPasswordToken", { error: err.message, stack: err.stack });
     res.status(500).json({ message: "Server error" });
   }
 };
 
 module.exports = {
   registerUser,
-  getUserPoints,
   loginUser,
   updateUserDetails,
   getUserProfile,

@@ -206,7 +206,7 @@ const createReservation = async (req, res, pool) => {
       if (!lockedId) {
         await client.query("ROLLBACK");
         return res.status(400).json({
-          message: "Το κουπόνι δεν είναι διαθέσιμο ή έχει ήδη χρησιμοποιηθεί.",
+          message: "Coupon is not available or has already been used.",
         });
       }
     }

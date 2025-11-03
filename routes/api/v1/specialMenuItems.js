@@ -1,4 +1,5 @@
 const express = require("express");
+const asyncHandler = require("../../../middleware/asyncHandler");
 
 const {
   createSpecialMenuItem,
@@ -8,14 +9,14 @@ const {
 module.exports = (pool) => {
   const router = express.Router();
   // Create link between special menu and menu item
-  router.post("/", (req, res) => {
-    createSpecialMenuItem(req, res, pool);
-  });
+  router.post("/", asyncHandler((req, res) => {
+    return createSpecialMenuItem(req, res, pool);
+  }));
 
   // Delete link between special menu and menu item
-  router.delete("/", (req, res) => {
-    deleteSpecialMenuItem(req, res, pool);
-  });
+  router.delete("/", asyncHandler((req, res) => {
+    return deleteSpecialMenuItem(req, res, pool);
+  }));
 
   return router;
 };

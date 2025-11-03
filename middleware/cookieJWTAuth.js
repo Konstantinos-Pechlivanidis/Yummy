@@ -7,8 +7,8 @@ const cookieJWTAuth = (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-    res.ClearCookie("token");
-    return res.status(500).json({ message: "Bearer time is off." });
+    res.clearCookie("token");
+    return res.status(401).json({ message: "Unauthorized - Invalid or expired token" });
   }
 };
 

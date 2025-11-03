@@ -23,7 +23,14 @@ const {
   sendResetPasswordEmail,
 } = require("../utils/sendVerificationEmail");
 
-const { JWT_SECRET, NODE_ENV, FRONT_END_URL, envPORT } = process.env;
+const { FRONT_END_URL, envPORT } = process.env;
+const {
+  generateToken,
+  verifyTokenFromCookie,
+  setTokenCookie,
+  clearTokenCookie,
+} = require("../utils/jwtHelper");
+const logger = require("../utils/logger");
 
 const registerOwner = async (req, res, pool) => {
   try {
@@ -67,28 +74,23 @@ const registerOwner = async (req, res, pool) => {
       message: "Owner registered. Check your email for verification.",
     });
   } catch (err) {
-    console.error("Error in registerOwner:", err);
+    logger.error("Error in registerOwner:", err);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
 const checkAuthStatus = (req, res) => {
-  const token = req.cookies.token;
-  if (!token) {
+  const decoded = verifyTokenFromCookie(req);
+  if (!decoded) {
+    clearTokenCookie(res);
     return res.json({ loggedIn: false });
   }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    res.json({ loggedIn: true, user: decoded }); 
-  } catch (err) {
-    res.clearCookie("token");
-    res.json({ loggedIn: false });
-  }
+  res.json({ loggedIn: true, user: decoded });
 };
 
 const logoutOwner = (req, res) => {
-  res.clearCookie("token");
+  clearTokenCookie(res);
   res.redirect("/");
 };
 
@@ -116,12 +118,12 @@ const requestResetPasswordOwner = async (req, res, pool) => {
       expiresAt,
     ]);
 
-    const resetUrl = `${FRONT_END_URL}:${envPORT}/reset-password-owner.html?token=${token}`;
+    const resetUrl = `${FRONT_END_URL}${envPORT ? `:${envPORT}` : ""}/reset-password-owner.html?token=${token}`;
     await sendResetPasswordEmail(owner, resetUrl);
 
     res.json({ message: "Reset link sent. Check your email." });
   } catch (err) {
-    console.error("❌ Error in requestPasswordReset:", err);
+    logger.error("❌ Error in requestPasswordReset:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -158,7 +160,7 @@ const resetPasswordOwner = async (req, res, pool) => {
 
     res.json({ message: "Password successfully updated." });
   } catch (err) {
-    console.error("❌ Error in resetPassword:", err);
+    logger.error("❌ Error in resetPassword:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -180,7 +182,7 @@ const checkResetPasswordTokenOwner = async (req, res, pool) => {
     // If we reach here, the token is valid
     res.json({ valid: true });
   } catch (err) {
-    console.error("❌ Error in checkResetPasswordTokenOwner:", err);
+    logger.error("❌ Error in checkResetPasswordTokenOwner:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -203,43 +205,38 @@ const loginOwner = async (req, res, pool) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    const payload = {
+    const token = generateToken({
       id: owner.id,
       email: owner.email,
       role: "owner",
       name: owner.name,
       confirmed_user: owner.confirmed_user,
-    };
-
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
-    
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: NODE_ENV === "production",
-      path: "/",
-      sameSite: "Lax",
-      maxAge: 24 * 60 * 60 * 1000,
     });
+    setTokenCookie(res, token);
 
-    // 👇 THE CRITICAL FIX: Return the full payload object as the 'owner' property.
     res.json({
       message: "Login successful",
-      owner: payload,
+      owner: {
+        id: owner.id,
+        email: owner.email,
+        role: "owner",
+        name: owner.name,
+        confirmed_user: owner.confirmed_user,
+      },
     });
   } catch (error) {
-    console.error(error.message);
+    logger.error(error.message);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 const updateOwnerDetails = async (req, res, pool) => {
   try {
-    const token = req.cookies.token;
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized - No token found" });
+    const decoded = verifyTokenFromCookie(req);
+    if (!decoded) {
+      clearTokenCookie(res);
+      return res.status(401).json({ message: "Unauthorized - Invalid or missing token" });
     }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
     const ownerId = decoded.id;
 
     const { error, value } = ownerUpdateSchema.validate(req.body);
@@ -271,19 +268,18 @@ const updateOwnerDetails = async (req, res, pool) => {
     
     res.json({ message: "Owner updated successfully", owner: result.rows[0] });
   } catch (err) {
-    console.error("❌ Error in updateOwnerDetails:", err);
+    logger.error("❌ Error in updateOwnerDetails:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 const getOwnerProfile = async (req, res, pool) => {
   try {
-    const token = req.cookies.token;
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized - No token found" });
+    const decoded = verifyTokenFromCookie(req);
+    if (!decoded) {
+      clearTokenCookie(res);
+      return res.status(401).json({ message: "Unauthorized - Invalid or missing token" });
     }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
     const ownerQuery = await pool.query(getOwnerById, [decoded.id]);
     
     if (ownerQuery.rows.length === 0) {
@@ -292,7 +288,7 @@ const getOwnerProfile = async (req, res, pool) => {
 
     res.json({ ...ownerQuery.rows[0], role: "owner" });
   } catch (error) {
-    console.error("❌ Error in getOwnerProfile:", error);
+    logger.error("❌ Error in getOwnerProfile:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -303,7 +299,7 @@ const verifyOwnerEmail = async (req, res, pool) => {
     if (!token)
       return res.status(400).json({ message: "Invalid or expired token" });
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     await pool.query(confirmOwner, [decoded.id]);
     
     res.json({ message: "Email verified successfully. You can now log in." });
@@ -333,7 +329,7 @@ const resendVerificationEmailToOwner = async (req, res, pool) => {
 
     res.json({ message: "Verification email resent! Check your inbox." });
   } catch (error) {
-    console.error("Error in resendVerificationEmailToOwner:", error);
+    logger.error("Error in resendVerificationEmailToOwner:", error);
     res.status(500).json({ message: "Error resending verification email." });
   }
 };

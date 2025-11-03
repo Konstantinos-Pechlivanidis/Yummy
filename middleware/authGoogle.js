@@ -40,11 +40,9 @@ passport.use(
           ]);
 
           try {
-            console.log("Calling sendVerificationEmail...");
             await sendVerificationEmail(newGoogleUser.rows[0]);
-            console.log("Verification email sent.");
           } catch (emailErr) {
-            console.error("Error sending verification email:", emailErr);
+            // Error logged in sendVerificationEmail
           }
         }
 

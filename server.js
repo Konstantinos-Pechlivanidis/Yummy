@@ -1,5 +1,12 @@
 // server.js
 require("dotenv").config();
+const { validateEnv } = require("./config/envValidator");
+
+// Validate environment variables before starting server
+validateEnv();
+
+// Initialize Sentry (if configured)
+const { initSentry } = require("./utils/sentry");
 
 // deps
 const express = require("express");
@@ -12,6 +19,9 @@ const cors = require("cors");
 const compression = require("compression");
 
 const { rateLimiter } = require("./middleware/rateLimiter");
+const requestIdMiddleware = require("./middleware/requestId");
+const { sanitizeRequestBody } = require("./utils/sanitizer");
+const logger = require("./utils/logger");
 const pool = require("./config/db.config");
 
 const { envPORT, FRONT_END_URL, NODE_ENV } = process.env;
@@ -32,13 +42,44 @@ const specialMenuItemsRoutes = require("./routes/api/v1/specialMenuItems");
 
 const app = express();
 
+// Initialize Redis cache (if configured)
+const { initRedis } = require("./utils/cache");
+initRedis().catch((err) => {
+  logger.warn("Redis initialization failed, continuing without cache", {
+    error: err.message,
+  });
+});
+
+// Initialize Sentry before other middleware
+initSentry(app);
+
+// Sentry request handler must be the first middleware
+const { Sentry } = require("./utils/sentry");
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.requestHandler());
+  app.use(Sentry.Handlers.tracingHandler());
+}
+
 /* ---------- core middleware ---------- */
 app.set("trust proxy", 1); // needed for secure cookies behind proxies
 
-app.use(morgan(NODE_ENV === "production" ? "combined" : "dev"));
+// Request ID tracking (must be first to track all requests)
+app.use(requestIdMiddleware);
+
+// Structured logging with morgan (enhanced with request IDs)
+const morganFormat = NODE_ENV === "production" ? "combined" : "dev";
+app.use(morgan(morganFormat, {
+  stream: {
+    write: (message) => logger.info(message.trim(), { source: "morgan" })
+  }
+}));
+
 app.use(compression());
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+
+// Input sanitization
+app.use(sanitizeRequestBody);
 
 // CORS (credentials + allowlist)
 const allowlist = (FRONT_END_URL || "").split(",").map(s => s.trim()).filter(Boolean);
@@ -88,8 +129,25 @@ app.use("/api/v1/specialMenus", specialMenusRoutes(pool));
 app.use("/api/v1/special-menu-items", specialMenuItemsRoutes(pool));
 
 /* ---------- utility routes ---------- */
-// Health check
-app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
+// Health check with database connectivity test
+app.get("/healthz", async (req, res) => {
+  try {
+    // Test database connectivity
+    await pool.query("SELECT 1");
+    res.status(200).json({ 
+      ok: true, 
+      database: "connected",
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({ 
+      ok: false, 
+      database: "disconnected",
+      error: "Database connection failed",
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 // Serve static login page (optional)
 app.get("/", (req, res) => {
@@ -104,13 +162,48 @@ app.use((req, res, next) => {
   next();
 });
 
+// Sentry error handler (must be before other error handlers)
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
+
+// Global error handler
 app.use((err, req, res, next) => {
-  // helpful logging; don't leak internals to clients
-  console.error("Unhandled error:", err);
-  res.status(500).json({ error: "Internal Server Error" });
+  // Capture error in Sentry
+  if (process.env.SENTRY_DSN) {
+    const { captureException } = require("./utils/sentry");
+    captureException(err, {
+      request: {
+        method: req.method,
+        path: req.path,
+        headers: req.headers,
+        query: req.query,
+      },
+      user: req.user || {},
+    });
+  }
+
+  // Log error with request context
+  logger.error("Unhandled error", {
+    requestId: req.id,
+    error: err.message,
+    stack: NODE_ENV !== "production" ? err.stack : undefined,
+    path: req.path,
+    method: req.method,
+  });
+
+  // Don't leak internals to clients in production
+  res.status(err.status || 500).json({
+    error: "Internal Server Error",
+    requestId: req.id,
+    ...(NODE_ENV !== "production" && { message: err.message }),
+  });
 });
 
 /* ---------- start ---------- */
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  logger.info(`Server running on port ${PORT}`, {
+    environment: NODE_ENV,
+    port: PORT,
+  });
 });

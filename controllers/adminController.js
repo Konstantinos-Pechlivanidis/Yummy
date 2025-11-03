@@ -1,5 +1,6 @@
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const logger = require("../utils/logger");
 const passport = require("passport");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
@@ -71,7 +72,7 @@ const createRestaurant = async (req, res, pool) => {
       restaurant: result.rows[0],
     });
   } catch (error) {
-    console.error("Error in createRestaurant:", error);
+    logger.error("Error in createRestaurant:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };

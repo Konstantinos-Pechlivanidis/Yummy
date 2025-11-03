@@ -1,5 +1,4 @@
 const nodemailer = require("nodemailer");
-const { contentSecurityPolicy } = require("helmet");
 const jwt = require("jsonwebtoken");
 
 const { FRONT_END_URL, envPORT, EMAIL_USER, EMAIL_PASS, JWT_SECRET } =

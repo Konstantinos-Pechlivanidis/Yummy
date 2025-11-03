@@ -1,6 +1,7 @@
 // controllers/specialMenusController.js
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const logger = require("../utils/logger");
 const { JWT_SECRET } = process.env;
 
 const {
@@ -97,7 +98,7 @@ const createSpecialMenu = async (req, res, pool) => {
     });
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("❌ Error creating special menu:", err);
+    logger.error("❌ Error creating special menu:", err);
     return res.status(500).json({ message: "Failed to create special menu." });
   } finally {
     client.release();
@@ -184,7 +185,7 @@ const updateSpecialMenu = async (req, res, pool) => {
     });
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("❌ Error updating special menu:", err);
+    logger.error("❌ Error updating special menu:", err);
     return res.status(500).json({ message: "Failed to update special menu." });
   } finally {
     client.release();
@@ -225,7 +226,7 @@ const deleteSpecialMenu = async (req, res, pool) => {
       .status(200)
       .json({ message: "Special menu deleted", deleted: rows[0] });
   } catch (err) {
-    console.error("❌ Error deleting special menu:", err);
+    logger.error("❌ Error deleting special menu:", err);
     return res.status(500).json({ message: "Failed to delete special menu." });
   }
 };

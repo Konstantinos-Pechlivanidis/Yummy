@@ -1,3 +1,4 @@
+const logger = require("../utils/logger");
 const {
   getTestimonials,
   getTestimonialsTotal,
@@ -39,7 +40,7 @@ const fetchTestimonials = async (req, res, pool) => {
       },
     });
   } catch (err) {
-    console.error("Error fetching testimonials:", err);
+    logger.error("Error fetching testimonials", { error: err.message, stack: err.stack });
     res.status(500).json({ message: "Failed to load testimonials." });
   }
 };

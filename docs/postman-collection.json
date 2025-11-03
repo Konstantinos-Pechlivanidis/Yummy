@@ -1,0 +1,1755 @@
+{
+	"info": {
+		"name": "Yummy API - Complete Collection",
+		"description": "Complete API collection for Yummy Restaurant Reservation System",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"version": "1.0.0"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "apiVersion",
+			"value": "v1",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Unified Auth Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/auth/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "auth", "status"]
+						},
+						"description": "Check authentication status for any user type (user, owner, admin)"
+					},
+					"response": [
+						{
+							"name": "Authenticated",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/auth/status",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "auth", "status"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"loggedIn\": true,\n    \"user\": {\n        \"id\": 1,\n        \"name\": \"John Doe\",\n        \"email\": \"john@example.com\",\n        \"role\": \"customer\",\n        \"confirmed_user\": true\n    }\n}"
+						},
+						{
+							"name": "Not Authenticated",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/auth/status",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "auth", "status"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"loggedIn\": false,\n    \"user\": null\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User Management",
+			"item": [
+				{
+					"name": "Register User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    // Extract token from Set-Cookie header",
+									"    const cookies = pm.response.headers.get('Set-Cookie');",
+									"    if (cookies) {",
+									"        const tokenMatch = cookies.match(/token=([^;]+)/);",
+									"        if (tokenMatch) {",
+									"            pm.collectionVariables.set('token', tokenMatch[1]);",
+									"        }",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"John Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"password123\",\n    \"phone\": \"+1234567890\",\n    \"role\": \"customer\",\n    \"newsletter_subscribed\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "register"]
+						},
+						"description": "Register a new user account. Returns JWT token in HTTP-only cookie."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"John Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"password123\",\n    \"phone\": \"+1234567890\",\n    \"role\": \"customer\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/register",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "register"]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Path=/; SameSite=Lax"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Registration successful\",\n    \"user\": {\n        \"id\": 1,\n        \"name\": \"John Doe\",\n        \"email\": \"john.doe@example.com\",\n        \"role\": \"customer\",\n        \"confirmed_user\": false\n    }\n}"
+						},
+						{
+							"name": "Validation Error",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Jo\",\n    \"email\": \"invalid-email\",\n    \"password\": \"123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/register",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "register"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"name must be at least 3 characters long\"\n}"
+						},
+						{
+							"name": "User Already Exists",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"John Doe\",\n    \"email\": \"existing@example.com\",\n    \"password\": \"password123\",\n    \"role\": \"customer\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/register",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "register"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"User already exists\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Login User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const cookies = pm.response.headers.get('Set-Cookie');",
+									"    if (cookies) {",
+									"        const tokenMatch = cookies.match(/token=([^;]+)/);",
+									"        if (tokenMatch) {",
+									"            pm.collectionVariables.set('token', tokenMatch[1]);",
+									"        }",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "login"]
+						},
+						"description": "Login with email and password. Returns JWT token in HTTP-only cookie."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"password123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/login",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "login"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Path=/; SameSite=Lax"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Login successful\",\n    \"user\": {\n        \"id\": 1,\n        \"name\": \"John Doe\",\n        \"email\": \"john.doe@example.com\",\n        \"role\": \"customer\",\n        \"confirmed_user\": true\n    }\n}"
+						},
+						{
+							"name": "Invalid Credentials",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"wrongpassword\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/login",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "login"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Invalid credentials\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get User Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "profile"]
+						},
+						"description": "Get authenticated user's profile. Requires authentication cookie."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/profile",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "profile"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"id\": 1,\n    \"name\": \"John Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"phone\": \"+1234567890\",\n    \"role\": \"customer\",\n    \"confirmed_user\": true,\n    \"profile_image\": null\n}"
+						},
+						{
+							"name": "Unauthorized",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/profile",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "profile"]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Unauthorized - Invalid or missing token\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Update User Profile",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"John Updated\",\n    \"phone\": \"+9876543210\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/update",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "update"]
+						},
+						"description": "Update user profile. All fields are optional."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"John Updated\",\n    \"phone\": \"+9876543210\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/update",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "update"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"User updated successfully\",\n    \"user\": {\n        \"id\": 1,\n        \"name\": \"John Updated\",\n        \"email\": \"john.doe@example.com\",\n        \"phone\": \"+9876543210\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get User Points",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/points",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "points"]
+						},
+						"description": "Get user's loyalty points"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/points",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "points"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"user_id\": 1,\n    \"loyalty_points\": 150\n}"
+						}
+					]
+				},
+				{
+					"name": "Get User Favorites",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/favorites?page=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "favorites"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get paginated list of favorite restaurants"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/favorites?page=1&pageSize=10",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "favorites"],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"user_id\": 1,\n    \"favoriteRestaurants\": [\n        {\n            \"id\": 1,\n            \"name\": \"Restaurant Name\",\n            \"location\": \"City\",\n            \"cuisine\": \"Italian\"\n        }\n    ],\n    \"Pagination\": {\n        \"currentPage\": 1,\n        \"recordsOnCurrentPage\": 5,\n        \"viewedRecords\": 5,\n        \"remainingRecords\": 0,\n        \"total\": 5\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Toggle Favorite Restaurant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"restaurant_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/favorites/toggle",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "favorites", "toggle"]
+						},
+						"description": "Add or remove restaurant from favorites"
+					},
+					"response": [
+						{
+							"name": "Added",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"restaurant_id\": 1\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/favorites/toggle",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "favorites", "toggle"]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"added\": true\n}"
+						},
+						{
+							"name": "Removed",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"restaurant_id\": 1\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/{{apiVersion}}/user/favorites/toggle",
+									"host": ["{{baseUrl}}"],
+									"path": ["api", "{{apiVersion}}", "user", "favorites", "toggle"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"removed\": true\n}"
+						}
+					]
+				},
+				{
+					"name": "Verify Email",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/verify-email?token=JWT_TOKEN_HERE",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "verify-email"],
+							"query": [
+								{
+									"key": "token",
+									"value": "JWT_TOKEN_HERE",
+									"description": "JWT token from verification email"
+								}
+							]
+						},
+						"description": "Verify user email using token from verification email"
+					},
+					"response": []
+				},
+				{
+					"name": "Resend Verification Email",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"john.doe@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/resend-verification",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "resend-verification"]
+						},
+						"description": "Resend email verification link"
+					},
+					"response": []
+				},
+				{
+					"name": "Request Password Reset",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"john.doe@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/password/reset/request",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "password", "reset", "request"]
+						},
+						"description": "Request password reset email"
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"reset_token_from_email\",\n    \"password\": \"newpassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/password/reset",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "password", "reset"]
+						},
+						"description": "Reset password using token from email"
+					},
+					"response": []
+				},
+				{
+					"name": "Validate Password Reset Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"reset_token_from_email\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/password/reset/validate/token",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "password", "reset", "validate", "token"]
+						},
+						"description": "Validate if password reset token is valid"
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/user/logout",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "user", "logout"]
+						},
+						"description": "Logout user (clears authentication cookie)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Owner Management",
+			"item": [
+				{
+					"name": "Register Owner",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Restaurant Owner\",\n    \"email\": \"owner@restaurant.com\",\n    \"password\": \"ownerpass123\",\n    \"phone\": \"+1234567890\",\n    \"role\": \"owner\",\n    \"newsletter_subscribed\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/owner/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "owner", "register"]
+						},
+						"description": "Register a new restaurant owner"
+					},
+					"response": []
+				},
+				{
+					"name": "Login Owner",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"owner@restaurant.com\",\n    \"password\": \"ownerpass123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/owner/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "owner", "login"]
+						},
+						"description": "Login as restaurant owner"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Owner Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/owner/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "owner", "profile"]
+						},
+						"description": "Get authenticated owner's profile"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Owner Profile",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Owner Name\",\n    \"phone\": \"+9876543210\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/owner/update",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "owner", "update"]
+						},
+						"description": "Update owner profile"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admin Management",
+			"item": [
+				{
+					"name": "Register Admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Admin User\",\n    \"email\": \"admin@yummy.com\",\n    \"password\": \"AdminPass123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/admin/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "admin", "register"]
+						},
+						"description": "Register a new admin user. Password must be at least 8 characters with letters and numbers."
+					},
+					"response": []
+				},
+				{
+					"name": "Login Admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@yummy.com\",\n    \"password\": \"AdminPass123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/admin/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "admin", "login"]
+						},
+						"description": "Login as admin"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Restaurant (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"New Restaurant\",\n    \"location\": \"Athens\",\n    \"cuisine\": \"Italian\",\n    \"address\": {\n        \"street\": \"Main Street\",\n        \"number\": \"123\",\n        \"postalCode\": \"10431\",\n        \"area\": \"City Center\"\n    },\n    \"coordinates\": {\n        \"lat\": 37.9838,\n        \"lng\": 23.7275\n    },\n    \"openingHours\": {\n        \"open\": \"11:00\",\n        \"close\": \"23:00\"\n    },\n    \"contact\": {\n        \"phone\": \"+302101234567\",\n        \"email\": \"restaurant@example.com\",\n        \"socialMedia\": {\n            \"facebook\": \"https://facebook.com/restaurant\",\n            \"instagram\": \"https://instagram.com/restaurant\"\n        }\n    },\n    \"owner_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/admin/createRestaurant",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "admin", "createRestaurant"]
+						},
+						"description": "Create a new restaurant. Admin only."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Restaurant Management",
+			"item": [
+				{
+					"name": "Get Trending Restaurants",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/restaurant/trending?page=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "restaurant", "trending"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get trending restaurants ordered by rating"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Discounted Restaurants",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/restaurant/discounted?page=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "restaurant", "discounted"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get restaurants with special menus/discounts"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Filtered Restaurants",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/restaurant?cuisine=Italian&location=Athens&page=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "restaurant"],
+							"query": [
+								{
+									"key": "cuisine",
+									"value": "Italian"
+								},
+								{
+									"key": "location",
+									"value": "Athens"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get filtered list of restaurants with pagination"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Restaurant by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/restaurant/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "restaurant", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Get restaurant details by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Restaurant Contact",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"contact\": {\n        \"phone\": \"+302109876543\",\n        \"email\": \"newemail@restaurant.com\",\n        \"socialMedia\": {\n            \"facebook\": \"https://facebook.com/new\",\n            \"instagram\": \"https://instagram.com/new\"\n        }\n    }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/restaurant/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "restaurant", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Update restaurant contact information. Owner only. Requires authentication."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Owner Restaurant",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/restaurant/owner",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "restaurant", "owner"]
+						},
+						"description": "Get restaurant details for authenticated owner"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Owner Overview",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/restaurant/owner/overview",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "restaurant", "owner", "overview"]
+						},
+						"description": "Get owner dashboard overview with statistics"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Reservations",
+			"item": [
+				{
+					"name": "Get User Reservations",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/reservations",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "reservations"]
+						},
+						"description": "Get all reservations for authenticated user"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Filtered Reservations",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/reservations/filter?status=confirmed&date=2024-01-15&page=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "reservations", "filter"],
+							"query": [
+								{
+									"key": "status",
+									"value": "confirmed",
+									"description": "pending, confirmed, completed, cancelled"
+								},
+								{
+									"key": "date",
+									"value": "2024-01-15",
+									"description": "YYYY-MM-DD format"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get filtered and paginated reservations for user"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Reservation by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/reservations/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "reservations", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Get single reservation by ID (user scope)"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Reservation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"restaurant_id\": 1,\n    \"date\": \"2024-01-20\",\n    \"time\": \"19:00\",\n    \"guest_count\": 4,\n    \"status\": \"pending\",\n    \"special_menu_id\": null,\n    \"coupon_id\": null,\n    \"reservation_notes\": \"Window seat preferred\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/reservations",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "reservations"]
+						},
+						"description": "Create a new reservation. User must be confirmed."
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel Reservation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"reason\": \"Change of plans\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/reservations/:id/cancel",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "reservations", ":id", "cancel"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Cancel a reservation (user)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Reservation",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/reservations/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "reservations", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Delete a reservation (user)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Owner Filtered Reservations",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/reservations/owner?status=pending&date=2024-01-15&page=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "reservations", "owner"],
+							"query": [
+								{
+									"key": "status",
+									"value": "pending"
+								},
+								{
+									"key": "date",
+									"value": "2024-01-15"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get filtered reservations for owner across their restaurants"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Reservation Status (Owner)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"reservation_id\": 1,\n    \"status\": \"confirmed\",\n    \"cancellation_reason\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/reservations/owner/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "reservations", "owner", "status"]
+						},
+						"description": "Update reservation status as owner. Status: pending, confirmed, cancelled, seated, completed"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Coupons",
+			"item": [
+				{
+					"name": "Get User Coupons",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/coupons/ownedByUser?page=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "coupons", "ownedByUser"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get paginated list of coupons owned by authenticated user"
+					},
+					"response": []
+				},
+				{
+					"name": "Purchase Coupon",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"coupon_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/coupons/purchase",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "coupons", "purchase"]
+						},
+						"description": "Purchase a coupon using loyalty points. User must be confirmed."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Available Coupons",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/coupons/available?restaurant_id=1&page=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "coupons", "available"],
+							"query": [
+								{
+									"key": "restaurant_id",
+									"value": "1",
+									"description": "Restaurant ID"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get available coupons for a restaurant (not yet purchased by user)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Restaurants with Purchased Coupons",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/coupons/purchased/restaurants",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "coupons", "purchased", "restaurants"]
+						},
+						"description": "Get restaurants where user has purchased coupons"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Coupon (Owner)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"description\": \"20% off on main course\",\n    \"discount_percentage\": 20,\n    \"required_points\": 100,\n    \"restaurant_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/coupons/creation",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "coupons", "creation"]
+						},
+						"description": "Create a new coupon. Owner only."
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Coupon (Owner)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"couponId\": 1,\n    \"description\": \"Updated description\",\n    \"discount_percentage\": 25\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/coupons/edit",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "coupons", "edit"]
+						},
+						"description": "Edit coupon. At least one field required."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Coupon (Owner)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/coupons/delete",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "coupons", "delete"]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"couponId\": 1\n}"
+						},
+						"description": "Delete coupon. Cannot delete if there are unused/locked purchases."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Menu Items",
+			"item": [
+				{
+					"name": "Create Menu Item",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Spaghetti Carbonara\",\n    \"price\": 15.50,\n    \"category\": \"Main Course\",\n    \"description\": \"Traditional Italian pasta\",\n    \"discount\": 0,\n    \"restaurant_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/menuItems",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "menuItems"]
+						},
+						"description": "Create a new menu item. Owner only."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Menu Item",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"restaurant_id\": 1,\n    \"name\": \"Updated Name\",\n    \"price\": 16.00\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/menuItems/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "menuItems", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Update menu item. Owner only."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Menu Item",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/menuItems/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "menuItems", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Delete menu item. Owner only."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Special Menus",
+			"item": [
+				{
+					"name": "Create Special Menu",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Valentine's Day Special\",\n    \"description\": \"Romantic dinner for two\",\n    \"discounted_price\": 89.99,\n    \"photo_url\": \"https://example.com/photo.jpg\",\n    \"restaurant_id\": 1,\n    \"availability\": {\n        \"type\": \"range\",\n        \"date\": \"2024-02-14\",\n        \"timeRange\": {\n            \"start\": \"18:00\",\n            \"end\": \"23:00\"\n        }\n    }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/specialMenus",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "specialMenus"]
+						},
+						"description": "Create a special menu. Owner only."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Special Menu",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Special Menu\",\n    \"discounted_price\": 99.99\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/specialMenus/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "specialMenus", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Update special menu. Owner only."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Special Menu",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/specialMenus/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "specialMenus", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Delete special menu. Owner only."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Special Menu Item Link",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"special_menu_id\": 1,\n    \"menu_item_id\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/special-menu-items",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "special-menu-items"]
+						},
+						"description": "Link a menu item to a special menu"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Special Menu Item Link",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"special_menu_id\": 1,\n    \"menu_item_id\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/special-menu-items",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "special-menu-items"]
+						},
+						"description": "Remove link between special menu and menu item"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Testimonials",
+			"item": [
+				{
+					"name": "Get All Testimonials",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/{{apiVersion}}/testimonials/all?page=1&limit=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "{{apiVersion}}", "testimonials", "all"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get paginated list of testimonials"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/healthz",
+							"host": ["{{baseUrl}}"],
+							"path": ["healthz"]
+						},
+						"description": "Health check endpoint with database connectivity test"
+					},
+					"response": [
+						{
+							"name": "Healthy",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/healthz",
+									"host": ["{{baseUrl}}"],
+									"path": ["healthz"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"ok\": true,\n    \"database\": \"connected\",\n    \"timestamp\": \"2024-01-15T10:30:00.000Z\"\n}"
+						},
+						{
+							"name": "Unhealthy",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/healthz",
+									"host": ["{{baseUrl}}"],
+									"path": ["healthz"]
+								}
+							},
+							"status": "Service Unavailable",
+							"code": 503,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"ok\": false,\n    \"database\": \"disconnected\",\n    \"error\": \"Database connection failed\",\n    \"timestamp\": \"2024-01-15T10:30:00.000Z\"\n}"
+						}
+					]
+				}
+			]
+		}
+	]
+}
+

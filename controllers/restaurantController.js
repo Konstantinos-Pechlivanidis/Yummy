@@ -23,6 +23,7 @@ const {
 } = require("../queries/reservationsQueries");
 
 const { updateRestaurantSchema } = require("../validators/restaurantValidator");
+const logger = require("../utils/logger");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -91,7 +92,7 @@ const getTrendingRestaurants = async (req, res, pool) => {
       },
     });
   } catch (err) {
-    console.error("Error fetching trending restaurants:", err);
+    logger.error("Error fetching trending restaurants:", err);
     res.status(500).json({ message: "Failed to load trending restaurants." });
   }
 };
@@ -126,7 +127,7 @@ const getDiscountedRestaurants = async (req, res, pool) => {
       },
     });
   } catch (err) {
-    console.error("Error fetching discounted restaurants:", err);
+    logger.error("Error fetching discounted restaurants:", err);
     res.status(500).json({ message: "Failed to load discounted restaurants." });
   }
 };
@@ -200,7 +201,7 @@ const getFilteredRestaurants = async (req, res, pool) => {
       },
     });
   } catch (err) {
-    console.error("Error fetching filtered restaurants:", err);
+    logger.error("Error fetching filtered restaurants:", err);
     res.status(500).json({ message: "Failed to load restaurants." });
   }
 };
@@ -226,7 +227,7 @@ const getRestaurantById = async (req, res, pool) => {
       coupons: couponRes.rows || [],
     });
   } catch (err) {
-    console.error("Error fetching restaurant details:", err);
+    logger.error("Error fetching restaurant details:", err);
     res.status(500).json({ message: "Failed to load restaurant details." });
   }
 };
@@ -278,7 +279,7 @@ const getOwnerRestaurant = async (req, res, pool) => {
 
     res.json({ restaurant: responseData });
   } catch (err) {
-    console.error("Error fetching owner's restaurant and related data:", err);
+    logger.error("Error fetching owner's restaurant and related data:", err);
     res.status(500).json({ message: "Failed to load restaurant data." });
   }
 };
@@ -355,7 +356,7 @@ const getOwnerOverview = async (req, res, pool) => {
 
     res.json({ restaurants: overview });
   } catch (err) {
-    console.error("Error building owner overview:", err);
+    logger.error("Error building owner overview:", err);
     res.status(500).json({ message: "Failed to load overview." });
   }
 };
@@ -408,7 +409,7 @@ const updateRestaurant = async (req, res, pool) => {
       .status(200)
       .json({ message: "Restaurant updated", restaurant: rows[0] });
   } catch (err) {
-    console.error("Error updating restaurant:", err);
+    logger.error("Error updating restaurant:", err);
     res.status(500).json({ message: "Failed to update restaurant." });
   }
 };

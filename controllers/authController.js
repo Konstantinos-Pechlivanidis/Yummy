@@ -1,7 +1,11 @@
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = process.env;
 
-// This is a new, unified controller to handle auth status for all user types.
+/**
+ * Unified authentication status checker for all user types
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
 const checkUnifiedAuthStatus = (req, res) => {
   const token = req.cookies.token;
   if (!token) {

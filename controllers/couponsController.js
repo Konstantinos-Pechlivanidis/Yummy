@@ -1,7 +1,11 @@
 // controllers/couponsController.js
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
-const { JWT_SECRET } = process.env;
+const {
+  verifyTokenFromCookie,
+  clearTokenCookie,
+} = require("../utils/jwtHelper");
+const logger = require("../utils/logger");
 
 const {
   fetchUserCouponsQuery,
@@ -27,18 +31,13 @@ const {
 /* ------------------------------- helpers ------------------------------- */
 
 const verifyToken = (req, res) => {
-  const token = req.cookies.token;
-  if (!token) {
-    res.status(401).json({ message: "Unauthorized - No token found" });
+  const decoded = verifyTokenFromCookie(req);
+  if (!decoded) {
+    clearTokenCookie(res);
+    res.status(401).json({ message: "Unauthorized - Invalid or missing token" });
     return null;
   }
-  try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    res.clearCookie("token");
-    res.status(401).json({ message: "Unauthorized - Invalid token" });
-    return null;
-  }
+  return decoded;
 };
 
 // Whitelist for PATCH
@@ -83,7 +82,7 @@ const getUserCoupons = async (req, res, pool) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching user coupons:", error);
+    logger.error("Error fetching user coupons:", error);
     return res.status(500).json({ message: "Failed to fetch user coupons." });
   }
 };
@@ -170,7 +169,7 @@ const purchaseCoupon = async (req, res, pool) => {
     return res.status(201).json(rows[0]);
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("Purchase coupon error:", err);
+    logger.error("Purchase coupon error:", err);
     return res.status(500).json({ message: "Αποτυχία αγοράς κουπονιού." });
   } finally {
     client.release();
@@ -230,7 +229,7 @@ const getAvailableCoupons = async (req, res, pool) => {
       },
     });
   } catch (err) {
-    console.error("Error fetching available coupons:", err);
+    logger.error("Error fetching available coupons:", err);
     return res.status(500).json({ message: "Failed to load available coupons." });
   }
 };
@@ -246,7 +245,7 @@ const getRestaurantsWithPurchasedCoupons = async (req, res, pool) => {
     const restaurantsWithPurchasedCoupons = result.rows;
     return res.status(200).json({ restaurantsWithPurchasedCoupons });
   } catch (error) {
-    console.error("Error fetching restaurants with coupons:", error);
+    logger.error("Error fetching restaurants with coupons:", error);
     return res.status(500).json({ message: "Failed to fetch restaurants." });
   }
 };
@@ -288,7 +287,7 @@ const createCoupon = async (req, res, pool) => {
       .status(201)
       .json({ message: "Coupon created successfully", coupon: rows[0] });
   } catch (err) {
-    console.error("Error creating coupon:", err);
+    logger.error("Error creating coupon:", err);
     return res.status(500).json({ message: "Failed to create coupon." });
   }
 };
@@ -344,7 +343,7 @@ const editCoupon = async (req, res, pool) => {
       .status(200)
       .json({ message: "Coupon updated successfully", coupon: rows[0] });
   } catch (err) {
-    console.error("Error updating coupon:", err);
+    logger.error("Error updating coupon:", err);
     return res.status(500).json({ message: "Failed to update coupon." });
   }
 };
@@ -386,7 +385,7 @@ const deleteCoupon = async (req, res, pool) => {
     if (usage.length > 0) {
       return res.status(409).json({
         message:
-          "Δεν μπορείτε να διαγράψετε το κουπόνι: υπάρχουν μη χρησιμοποιημένες ή κλειδωμένες αγορές.",
+          "Cannot delete coupon: there are unused or locked purchases.",
       });
     }
 
@@ -399,7 +398,7 @@ const deleteCoupon = async (req, res, pool) => {
       .status(200)
       .json({ message: "Coupon deleted successfully", coupon: rows[0] });
   } catch (err) {
-    console.error("Error deleting coupon:", err);
+    logger.error("Error deleting coupon:", err);
     return res.status(500).json({ message: "Failed to delete coupon." });
   }
 };

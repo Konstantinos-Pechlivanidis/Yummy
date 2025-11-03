@@ -1,6 +1,7 @@
 // controllers/menuItemsController.js
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const logger = require("../utils/logger");
 const { JWT_SECRET } = process.env;
 
 const {
@@ -82,7 +83,7 @@ const createMenuItem = async (req, res, pool) => {
       .status(201)
       .json({ message: "Menu item created", menu_item: rows[0] });
   } catch (err) {
-    console.error("Error creating menu item:", err);
+    logger.error("Error creating menu item:", err);
     return res.status(500).json({ message: "Failed to create menu item." });
   }
 };
@@ -138,7 +139,7 @@ const updateMenuItem = async (req, res, pool) => {
       .status(200)
       .json({ message: "Menu item updated", menu_item: rows[0] });
   } catch (err) {
-    console.error("Error updating menu item:", err);
+    logger.error("Error updating menu item:", err);
     return res.status(500).json({ message: "Failed to update menu item." });
   }
 };
@@ -174,7 +175,7 @@ const deleteMenuItem = async (req, res, pool) => {
       .status(200)
       .json({ message: "Menu item deleted successfully", menu_item: rows[0] });
   } catch (err) {
-    console.error("Error deleting menu item:", err);
+    logger.error("Error deleting menu item:", err);
     return res.status(500).json({ message: "Failed to delete menu item." });
   }
 };

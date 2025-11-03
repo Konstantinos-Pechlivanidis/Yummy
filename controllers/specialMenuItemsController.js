@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const logger = require("../utils/logger");
 const {
   createSpecialMenuItemSchema,
   deleteSpecialMenuItemSchema,
@@ -53,7 +54,7 @@ const createSpecialMenuItem = async (req, res, pool) => {
       .status(201)
       .json({ message: "Menu item added to special menu", link: rows[0] });
   } catch (err) {
-    console.error("❌ Error creating special_menu_item link:", err);
+    logger.error("❌ Error creating special_menu_item link:", err);
     res
       .status(500)
       .json({ message: "Failed to add menu item to special menu." });
@@ -88,8 +89,6 @@ const deleteSpecialMenuItem = async (req, res, pool) => {
       special_menu_id,
       decoded.id,
     ]);
-    console.log(special_menu_id);
-    console.log(decoded.id);
     if (ownerCheck.rowCount === 0)
       return res
         .status(403)
@@ -107,7 +106,7 @@ const deleteSpecialMenuItem = async (req, res, pool) => {
       deleted: rows[0],
     });
   } catch (err) {
-    console.error("❌ Error deleting special_menu_item link:", err);
+    logger.error("❌ Error deleting special_menu_item link:", err);
     res
       .status(500)
       .json({ message: "Failed to remove menu item from special menu." });
