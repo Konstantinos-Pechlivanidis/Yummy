@@ -42,13 +42,15 @@ const specialMenuItemsRoutes = require("./routes/api/v1/specialMenuItems");
 
 const app = express();
 
-// Initialize Redis cache (if configured)
-const { initRedis } = require("./utils/cache");
-initRedis().catch((err) => {
-  logger.warn("Redis initialization failed, continuing without cache", {
-    error: err.message,
-  });
-});
+// Note: Redis caching disabled for current version. 
+// Cache middleware will use in-memory cache automatically.
+// To enable Redis in future version, uncomment the following:
+// const { initRedis } = require("./utils/cache");
+// initRedis().catch((err) => {
+//   logger.warn("Redis initialization failed, continuing without cache", {
+//     error: err.message,
+//   });
+// });
 
 // Initialize Sentry before other middleware
 initSentry(app);
